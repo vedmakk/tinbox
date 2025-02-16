@@ -23,7 +23,7 @@
    - **Sliding Window** (recommended for long TXT or user-specified)
 
 4. 🤖 **Model Flexibility**  
-   - Multimodal models (GPT-4V, Claude 3.5 Sonnet) for PDF processing
+   - Multimodal models (GPT-4o, Claude 3.5 Sonnet) for PDF processing
    - Text-based models for Word/TXT processing
    - Support for both local and cloud providers
 
