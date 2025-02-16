@@ -5,6 +5,14 @@ from datetime import datetime
 from typing import AsyncIterator, Union
 
 from litellm import completion
+from litellm.exceptions import RateLimitError
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
 
 from tinbox.core.translation.interface import (
     ModelInterface,
@@ -16,6 +24,18 @@ from tinbox.core.types import ModelType
 from tinbox.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Configure retry decorator for rate limit handling
+completion_with_retry = retry(
+    retry=retry_if_exception_type(RateLimitError),
+    wait=wait_exponential(
+        multiplier=1, min=4, max=120
+    ),  # Start at 4s, double each time, max 60s
+    stop=stop_after_attempt(10),  # Maximum 5 attempts
+    before_sleep=before_sleep_log(
+        logger, log_level=20
+    ),  # Log retry attempts at INFO level
+)
 
 
 class LiteLLMTranslator(ModelInterface):
@@ -91,7 +111,10 @@ class LiteLLMTranslator(ModelInterface):
                     f"You are a professional translator. Translate the following content "
                     f"from {request.source_lang} to {request.target_lang}. "
                     f"Maintain the original formatting and structure. "
-                    f"Translate only the content, do not add any explanations or notes."
+                    f"Translate only the content, do not add any explanations or notes. "
+                    f"Do not add any commentary or notes to the translation. It is extremely "
+                    f"important that the only output you give is the translation of the content."
+                    f"Your translation should be in {request.target_lang} language."
                 ),
             }
         ]
@@ -130,6 +153,37 @@ class LiteLLMTranslator(ModelInterface):
 
         return messages
 
+    @completion_with_retry
+    async def _make_completion_request(
+        self, request: TranslationRequest, stream: bool = False
+    ):
+        """Make a completion request with retry logic for rate limits.
+
+        Args:
+            request: The translation request
+            stream: Whether to stream the response
+
+        Returns:
+            The completion response
+
+        Raises:
+            TranslationError: If translation fails after retries
+        """
+        try:
+            return completion(
+                model=self._get_model_string(request),
+                messages=self._create_prompt(request),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+                stream=stream,
+                **{k: v for k, v in request.model_params.items() if k != "model_name"},
+            )
+        except RateLimitError as e:
+            # This will be caught by the retry decorator
+            raise
+        except Exception as e:
+            raise TranslationError(f"Translation failed: {str(e)}") from e
+
     async def translate(
         self,
         request: TranslationRequest,
@@ -157,17 +211,8 @@ class LiteLLMTranslator(ModelInterface):
                     accumulated_text = ""
 
                     try:
-                        response = completion(
-                            model=self._get_model_string(request),
-                            messages=self._create_prompt(request),
-                            temperature=self.temperature,
-                            max_tokens=self.max_tokens,
-                            stream=True,
-                            **{
-                                k: v
-                                for k, v in request.model_params.items()
-                                if k != "model_name"
-                            },
+                        response = await self._make_completion_request(
+                            request, stream=True
                         )
 
                         async for chunk in response:
@@ -190,23 +235,15 @@ class LiteLLMTranslator(ModelInterface):
                                 ).total_seconds(),
                             )
                     except Exception as e:
+                        self._logger.error(f"Streaming failed: {str(e)}")
                         raise TranslationError(f"Streaming failed: {str(e)}") from e
 
                 return response_generator()
             else:
                 # For non-streaming, make a single request
                 try:
-                    response = completion(
-                        model=self._get_model_string(request),
-                        messages=self._create_prompt(request),
-                        temperature=self.temperature,
-                        max_tokens=self.max_tokens,
-                        stream=False,
-                        **{
-                            k: v
-                            for k, v in request.model_params.items()
-                            if k != "model_name"
-                        },
+                    response = await self._make_completion_request(
+                        request, stream=False
                     )
 
                     if not hasattr(response, "choices") or not response.choices:
@@ -223,10 +260,12 @@ class LiteLLMTranslator(ModelInterface):
                         time_taken=(datetime.now() - start_time).total_seconds(),
                     )
                 except Exception as e:
+                    self._logger.error(f"Translation failed: {str(e)}")
                     raise TranslationError(f"Translation failed: {str(e)}") from e
 
         except Exception as e:
             # Catch any remaining errors
+            self._logger.error(f"Translation failed: {str(e)}")
             raise TranslationError(f"Translation failed: {str(e)}") from e
 
     async def validate_model(self) -> bool:
