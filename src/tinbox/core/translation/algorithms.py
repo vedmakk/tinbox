@@ -96,6 +96,7 @@ async def translate_document(
     config: TranslationConfig,
     translator: ModelInterface,
     progress: Optional[Progress] = None,
+    checkpoint_manager: Optional[CheckpointManager] = None,
 ) -> TranslationResponse:
     """Translate a document using the specified algorithm.
 
@@ -104,6 +105,7 @@ async def translate_document(
         config: Translation configuration
         translator: Model interface to use
         progress: Optional progress bar
+        checkpoint_manager: Optional checkpoint manager for saving/loading state
 
     Returns:
         Translation result
@@ -112,9 +114,21 @@ async def translate_document(
         TranslationError: If translation fails
     """
     if config.algorithm == "page":
-        return await translate_page_by_page(content, config, translator, progress)
+        return await translate_page_by_page(
+            content,
+            config,
+            translator,
+            progress,
+            checkpoint_manager,
+        )
     elif config.algorithm == "sliding-window":
-        return await translate_sliding_window(content, config, translator, progress)
+        return await translate_sliding_window(
+            content,
+            config,
+            translator,
+            progress,
+            checkpoint_manager,
+        )
     else:
         raise TranslationError(f"Unknown algorithm: {config.algorithm}")
 
@@ -124,6 +138,7 @@ async def translate_page_by_page(
     config: TranslationConfig,
     translator: ModelInterface,
     progress: Optional[Progress] = None,
+    checkpoint_manager: Optional[CheckpointManager] = None,
 ) -> TranslationResponse:
     """Translate a document page by page.
 
@@ -132,6 +147,7 @@ async def translate_page_by_page(
         config: Translation configuration
         translator: Model interface to use
         progress: Optional progress bar
+        checkpoint_manager: Optional checkpoint manager for saving/loading state
 
     Returns:
         Translation result
@@ -143,6 +159,7 @@ async def translate_page_by_page(
     total_cost = 0.0
     translated_pages = []
     task_id: Optional[TaskID] = None
+    start_time = datetime.now()
 
     try:
         # Set up progress tracking
@@ -153,58 +170,97 @@ async def translate_page_by_page(
             )
 
         # Check for checkpoint
-        if should_resume(config):
-            checkpoint = load_checkpoint(config)
+        if checkpoint_manager and config.resume_from_checkpoint:
+            checkpoint = await checkpoint_manager.load()
             if checkpoint:
-                translated_pages = checkpoint.pages
-                total_tokens = checkpoint.tokens_used
+                translated_pages = list(checkpoint.translated_chunks.values())
+                total_tokens = checkpoint.token_usage
                 total_cost = checkpoint.cost
                 if progress and task_id is not None:
                     progress.update(task_id, completed=len(translated_pages))
+
+        # Track failed pages
+        failed_pages: list[int] = []
 
         # Translate remaining pages
         for i, page in enumerate(
             content.pages[len(translated_pages) :], len(translated_pages)
         ):
-            # Create translation request
-            request = TranslationRequest(
-                source_lang=config.source_lang,
-                target_lang=config.target_lang,
-                content=page,
-                content_type=content.content_type,
-                model=config.model,
-                model_params={"model_name": config.model_name}
-                if config.model_name
-                else {},
-            )
-
-            # Translate page
-            response = await translator.translate(request)
-            translated_pages.append(response.text)
-            total_tokens += response.tokens_used
-            total_cost += response.cost
-
-            # Update progress
-            if progress and task_id is not None:
-                progress.update(task_id, advance=1)
-
-            # Save checkpoint if needed
-            if config.checkpoint_dir and (i + 1) % config.checkpoint_frequency == 0:
-                await save_checkpoint(
-                    config=config,
-                    pages=translated_pages,
-                    tokens_used=total_tokens,
-                    cost=total_cost,
+            try:
+                # Create translation request
+                request = TranslationRequest(
+                    source_lang=config.source_lang,
+                    target_lang=config.target_lang,
+                    content=page,
+                    content_type=content.content_type,
+                    model=config.model,
+                    model_params={"model_name": config.model_name}
+                    if config.model_name
+                    else {},
                 )
+
+                # Translate page
+                response = await translator.translate(request)
+                translated_pages.append(response.text)
+                total_tokens += response.tokens_used
+                total_cost += response.cost
+
+                # Update progress
+                if progress and task_id is not None:
+                    progress.update(task_id, advance=1)
+
+                # Save checkpoint if needed
+                if (
+                    checkpoint_manager
+                    and config.checkpoint_dir
+                    and (i + 1) % config.checkpoint_frequency == 0
+                ):
+                    state = TranslationState(
+                        source_lang=config.source_lang,
+                        target_lang=config.target_lang,
+                        algorithm="page",
+                        completed_pages=list(range(1, len(translated_pages) + 1)),
+                        failed_pages=failed_pages,
+                        translated_chunks={
+                            i + 1: text for i, text in enumerate(translated_pages)
+                        },
+                        token_usage=total_tokens,
+                        cost=total_cost,
+                        time_taken=(datetime.now() - start_time).total_seconds(),
+                    )
+                    await checkpoint_manager.save(state)
+
+            except Exception as e:
+                logger.error(f"Failed to translate page {i + 1}: {str(e)}")
+                failed_pages.append(i + 1)
+
+        if not translated_pages:
+            if failed_pages:
+                raise TranslationError(
+                    f"Translation failed: No pages were successfully translated. Failed pages: {failed_pages}"
+                )
+            else:
+                raise TranslationError(
+                    f"Translation failed: No pages were successfully translated"
+                )
+
+        if failed_pages:
+            logger.warning(f"Failed pages: {failed_pages}")
 
         # Join pages with double newlines
         final_text = "\n\n".join(translated_pages)
+
+        time_taken = (datetime.now() - start_time).total_seconds()
+
+        # Clean up checkpoints if successful
+        if checkpoint_manager:
+            await checkpoint_manager.cleanup_old_checkpoints(config.input_file)
 
         return TranslationResponse(
             text=final_text,
             tokens_used=total_tokens,
             cost=total_cost,
-            time_taken=0.0,  # Will be set by caller
+            time_taken=time_taken,
         )
 
     except Exception as e:
@@ -216,6 +272,7 @@ async def translate_sliding_window(
     config: TranslationConfig,
     translator: ModelInterface,
     progress: Optional[Progress] = None,
+    checkpoint_manager: Optional[CheckpointManager] = None,
 ) -> TranslationResponse:
     """Translate a document using sliding window algorithm.
 
@@ -224,6 +281,7 @@ async def translate_sliding_window(
         config: Translation configuration
         translator: Model interface to use
         progress: Optional progress bar
+        checkpoint_manager: Optional checkpoint manager for saving/loading state
 
     Returns:
         Translation result
@@ -231,31 +289,131 @@ async def translate_sliding_window(
     Raises:
         TranslationError: If translation fails
     """
+    print("Starting sliding window translation")  # Debug print
+
     if isinstance(content.pages[0], bytes):
         raise TranslationError(
             "Sliding window algorithm not supported for image content"
         )
 
+    start_time = datetime.now()
+    total_tokens = 0
+    total_cost = 0.0
+
     try:
+        # Check for checkpoint
+        if checkpoint_manager and config.resume_from_checkpoint:
+            print("Checking for checkpoint")  # Debug print
+            checkpoint = await checkpoint_manager.load()
+            if checkpoint and checkpoint.translated_chunks:
+                print("Found valid checkpoint")  # Debug print
+                time_taken = (datetime.now() - start_time).total_seconds()
+                return TranslationResponse(
+                    text="\n\n".join(checkpoint.translated_chunks.values()),
+                    tokens_used=checkpoint.token_usage,
+                    cost=checkpoint.cost,
+                    time_taken=time_taken,
+                )
+
         # Join all pages into single text
         text = "\n\n".join(content.pages)
+        print(f"Combined text: {text}")  # Debug print
 
-        # Create translation request
-        request = TranslationRequest(
-            source_lang=config.source_lang,
-            target_lang=config.target_lang,
-            content=text,
-            content_type="text/plain",
-            model=config.model,
-            model_params={"model_name": config.model_name} if config.model_name else {},
+        # Use configured window size and overlap size, with fallbacks
+        window_size = config.window_size if config.window_size is not None else 1000
+        overlap_size = (
+            config.overlap_size
+            if config.overlap_size is not None
+            else min(100, window_size // 4)
+        )
+        print(
+            f"Using window size: {window_size}, overlap size: {overlap_size}"
+        )  # Debug print
+
+        # Create windows
+        windows = create_windows(
+            text,
+            window_size,
+            overlap_size,
+        )
+        print(f"Created {len(windows)} windows")  # Debug print
+
+        # Set up progress tracking
+        if progress:
+            task_id = progress.add_task(
+                "Translating windows...",
+                total=len(windows),
+            )
+
+        # Translate each window
+        translated_windows = []
+        for i, window in enumerate(windows):
+            print(f"Translating window {i + 1}: {window}")  # Debug print
+            # Create translation request
+            request = TranslationRequest(
+                source_lang=config.source_lang,
+                target_lang=config.target_lang,
+                content=window,
+                content_type="text/plain",
+                model=config.model,
+                model_params={"model_name": config.model_name}
+                if config.model_name
+                else {},
+            )
+
+            # Translate window
+            response = await translator.translate(request)
+            translated_windows.append(response.text)
+            total_tokens += response.tokens_used
+            total_cost += response.cost
+
+            # Update progress
+            if progress:
+                progress.update(task_id, advance=1)
+
+            # Save checkpoint if needed
+            if (
+                checkpoint_manager
+                and config.checkpoint_dir
+                and (i + 1) % config.checkpoint_frequency == 0
+            ):
+                print(f"Saving checkpoint after window {i + 1}")  # Debug print
+                state = TranslationState(
+                    source_lang=config.source_lang,
+                    target_lang=config.target_lang,
+                    algorithm="sliding-window",
+                    completed_pages=[
+                        1
+                    ],  # Sliding window treats the whole document as one page
+                    failed_pages=[],
+                    translated_chunks={
+                        i + 1: text for i, text in enumerate(translated_windows)
+                    },
+                    token_usage=total_tokens,
+                    cost=total_cost,
+                    time_taken=(datetime.now() - start_time).total_seconds(),
+                )
+                await checkpoint_manager.save(state)
+
+        # Merge windows
+        final_text = merge_chunks(translated_windows, overlap_size)
+        print(f"Final merged text: {final_text}")  # Debug print
+
+        time_taken = (datetime.now() - start_time).total_seconds()
+
+        # Clean up checkpoints if successful
+        if checkpoint_manager:
+            await checkpoint_manager.cleanup_old_checkpoints(config.input_file)
+
+        return TranslationResponse(
+            text=final_text,
+            tokens_used=total_tokens,
+            cost=total_cost,
+            time_taken=time_taken,
         )
 
-        # Translate entire text
-        response = await translator.translate(request)
-        return response
-
     except Exception as e:
-        logger.exception("Translation failed")
+        print(f"Error in sliding window translation: {str(e)}")  # Debug print
         raise TranslationError(f"Translation failed: {str(e)}") from e
 
 
@@ -312,6 +470,9 @@ def create_windows(
     Returns:
         List of text windows
     """
+    print(f"Creating windows for text: {text}")  # Debug print
+    print(f"Window size: {window_size}, Overlap size: {overlap_size}")  # Debug print
+
     if not text:
         return []
 
@@ -331,6 +492,7 @@ def create_windows(
 
         # Extract window
         window = text[start:end]
+        print(f"Created window: {window}")  # Debug print
         windows.append(window)
 
         # If we've reached the end, break
@@ -342,6 +504,7 @@ def create_windows(
         if start <= 0 or start >= end:
             break
 
+    print(f"Created {len(windows)} windows")  # Debug print
     return windows
 
 

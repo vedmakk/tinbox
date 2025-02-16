@@ -16,10 +16,15 @@ logger = get_logger(__name__)
 class TranslationState:
     """State of a translation task for checkpointing."""
 
-    pages: list[str]
-    tokens_used: int
+    source_lang: str
+    target_lang: str
+    algorithm: str
+    completed_pages: list[int]
+    failed_pages: list[int]
+    translated_chunks: dict[int, str]
+    token_usage: int
     cost: float
-    timestamp: str
+    time_taken: float
 
 
 class CheckpointManager:
@@ -59,10 +64,15 @@ class CheckpointManager:
         try:
             checkpoint_path = self._get_checkpoint_path()
             checkpoint_data = {
-                "pages": state.pages,
-                "tokens_used": state.tokens_used,
+                "source_lang": state.source_lang,
+                "target_lang": state.target_lang,
+                "algorithm": state.algorithm,
+                "completed_pages": state.completed_pages,
+                "failed_pages": state.failed_pages,
+                "translated_chunks": state.translated_chunks,
+                "token_usage": state.token_usage,
                 "cost": state.cost,
-                "timestamp": state.timestamp,
+                "time_taken": state.time_taken,
                 "config": {
                     "source_lang": self.config.source_lang,
                     "target_lang": self.config.target_lang,
@@ -79,8 +89,8 @@ class CheckpointManager:
 
             self._logger.info(
                 f"Saved checkpoint to {checkpoint_path}",
-                pages=len(state.pages),
-                tokens=state.tokens_used,
+                pages=len(state.completed_pages) + len(state.failed_pages),
+                tokens=state.token_usage,
                 cost=state.cost,
             )
 
@@ -123,16 +133,21 @@ class CheckpointManager:
                 return None
 
             state = TranslationState(
-                pages=data["pages"],
-                tokens_used=data["tokens_used"],
+                source_lang=data["source_lang"],
+                target_lang=data["target_lang"],
+                algorithm=data["algorithm"],
+                completed_pages=data["completed_pages"],
+                failed_pages=data["failed_pages"],
+                translated_chunks=data["translated_chunks"],
+                token_usage=data["token_usage"],
                 cost=data["cost"],
-                timestamp=data["timestamp"],
+                time_taken=data["time_taken"],
             )
 
             self._logger.info(
                 f"Loaded checkpoint from {checkpoint_path}",
-                pages=len(state.pages),
-                tokens=state.tokens_used,
+                pages=len(state.completed_pages) + len(state.failed_pages),
+                tokens=state.token_usage,
                 cost=state.cost,
             )
 
@@ -193,10 +208,15 @@ async def save_checkpoint(
         return
 
     state = TranslationState(
-        pages=pages,
-        tokens_used=tokens_used,
+        source_lang=config.source_lang,
+        target_lang=config.target_lang,
+        algorithm=config.algorithm,
+        completed_pages=[],
+        failed_pages=[],
+        translated_chunks={},
+        token_usage=tokens_used,
         cost=cost,
-        timestamp=datetime.now().isoformat(),
+        time_taken=0.0,
     )
 
     manager = CheckpointManager(config)
