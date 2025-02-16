@@ -98,7 +98,12 @@ class LiteLLMTranslator(ModelInterface):
 
         if request.content_type.startswith("text/"):
             # Text content
-            messages.append({"role": "user", "content": request.content})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"{request.content}\n\nTranslation without commentary:",
+                }
+            )
         else:
             # Image content
             messages.append(
@@ -114,6 +119,10 @@ class LiteLLMTranslator(ModelInterface):
                             "image_url": {
                                 "url": f"data:image/png;base64,{base64.b64encode(request.content).decode()}"
                             },
+                        },
+                        {
+                            "type": "text",
+                            "text": f"Translation without commentary:",
                         },
                     ],
                 }
