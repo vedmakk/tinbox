@@ -1,38 +1,43 @@
-# Tinbox: A CLI Translation Tool
+# 🔄 Tinbox: A CLI Translation Tool
 
-**Tinbox** is a command-line tool designed to translate documents using various
-Large Language Models (LLMs), including both text-only and multimodal models.
-For PDFs, it leverages multimodal models (like GPT-4o or Claude 3.5 Sonnet) to
-directly process page images without OCR. For text-based formats (Word, TXT), it
-uses text-to-text translation. The tool supports multiple input/output formats
-and includes two primary translation algorithms—**Page-by-Page with Seam
-Repair** and **Sliding Window**—with benchmarking capabilities for time and
-token usage/cost. It also supports local model inference using Ollama.
+**Tinbox** is a powerful command-line tool that harnesses the capabilities of Large Language Models (LLMs) to provide seamless document translation. Whether you're working with PDFs, Word documents, or plain text, Tinbox has you covered with both text-only and multimodal translation capabilities.
 
-## Features
+🔍 **Key Highlights:**
+- PDF translation using multimodal models (GPT-4V, Claude 3.5 Sonnet) - no OCR needed!
+- Smart translation algorithms for optimal results
+- Local model support via Ollama
+- Comprehensive benchmarking tools
 
-1. **Multiple Input Formats**  
+## ✨ Features
+
+1. 📄 **Multiple Input Formats**  
    - PDF (processed as images for multimodal models)
    - Word (docx) and TXT (processed as text)
-2. **Multiple Output Formats**  
+
+2. 📝 **Multiple Output Formats**  
    - Defaults to stdout or `.txt` file
    - Future extensibility for PDF or Word output
-3. **Two Translation Algorithms**  
+
+3. 🧠 **Smart Translation Algorithms**  
    - **Page-by-Page + Seam Repair** (default for PDF)
    - **Sliding Window** (recommended for long TXT or user-specified)
-4. **Model Flexibility**  
-   - Multimodal models (GPT-4o, Claude 3.5 Sonnet) for PDF processing
+
+4. 🤖 **Model Flexibility**  
+   - Multimodal models (GPT-4V, Claude 3.5 Sonnet) for PDF processing
    - Text-based models for Word/TXT processing
    - Support for both local and cloud providers
-5. **Language Support**
+
+5. 🌐 **Language Support**
    - Flexible source/target language specification using ISO 639-1 codes
    - Common language aliases (e.g., 'en', 'zh', 'es')
-6. **Benchmarking**  
+
+6. 📊 **Benchmarking**  
    - Track overall translation time and token usage/cost
    - Compare algorithms or model providers side-by-side
 
-## Installation & Dependencies
+## 🚀 Installation & Dependencies
 
+### Requirements
 1. **Python 3.9+** (recommended)
 2. **Model Dependencies**:
    - `litellm` for unified model interface
