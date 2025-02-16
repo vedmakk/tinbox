@@ -16,11 +16,12 @@ class FileType(str, Enum):
 
 
 class ModelType(str, Enum):
-    """Supported LLM models for translation."""
+    """Supported LLM model providers."""
 
-    GPT4O = "gpt-4o"  # OpenAI GPT-4 with vision capabilities
-    CLAUDE_3_SONNET = "claude-3-sonnet"  # Anthropic Claude 3 Sonnet
-    OLLAMA = "ollama"  # For local models
+    OPENAI = "openai"  # OpenAI models (GPT-4, etc.)
+    ANTHROPIC = "anthropic"  # Anthropic models (Claude)
+    OLLAMA = "ollama"  # Local models via Ollama
+    GEMINI = "gemini"  # Google's Gemini models
 
 
 class TranslationConfig(BaseModel):
@@ -30,6 +31,9 @@ class TranslationConfig(BaseModel):
     source_lang: str
     target_lang: str
     model: ModelType
+    model_name: str = Field(
+        description="Specific model name (e.g., 'gpt-4o' for OpenAI, 'claude-3-sonnet' for Anthropic)",
+    )
     algorithm: Literal["page", "sliding-window"]
     input_file: Path
     output_file: Optional[Path] = None

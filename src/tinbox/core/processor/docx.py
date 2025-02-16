@@ -2,7 +2,7 @@
 
 import re
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, Union
 from zipfile import BadZipFile
 
 from docx import Document
@@ -103,7 +103,7 @@ class WordProcessor(BaseDocumentProcessor):
         *,
         start_page: int = 1,
         end_page: int | None = None,
-    ) -> AsyncIterator[DocumentContent]:
+    ) -> AsyncIterator[Union[str, bytes]]:
         """Extract content from the Word document.
 
         Since Word documents are treated as single text files, page parameters are ignored.
@@ -115,7 +115,7 @@ class WordProcessor(BaseDocumentProcessor):
             end_page: Ignored (kept for interface compatibility)
 
         Yields:
-            Document content
+            Text content of paragraphs
 
         Raises:
             ProcessingError: If content extraction fails
@@ -125,20 +125,11 @@ class WordProcessor(BaseDocumentProcessor):
         try:
             # Load document and extract text
             doc = Document(file_path)
-            text = _extract_text(doc)
 
-            # Detect if text contains RTL content
-            has_rtl = bool(self._rtl_pattern.search(text))
-
-            yield DocumentContent(
-                content=text,
-                content_type="text/plain",
-                page_number=1,  # Single "page"
-                metadata={
-                    "length": len(text),
-                    "contains_rtl": has_rtl,
-                },
-            )
+            # Extract paragraphs
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():  # Only yield non-empty paragraphs
+                    yield paragraph.text.strip()
 
         except PackageNotFoundError as e:
             raise ProcessingError(

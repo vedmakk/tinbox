@@ -11,10 +11,16 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from tinbox.core import FileType, ModelType, TranslationConfig, translate_document
+from tinbox.core import (
+    FileType,
+    ModelType,
+    TranslationConfig,
+    TranslationResult,
+    translate_document,
+)
 from tinbox.core.cost import estimate_cost
 from tinbox.core.processor import load_document
-from tinbox.core.translation.interface import ModelInterface
+from tinbox.core.translation import create_translator
 from tinbox.core.output import (
     OutputFormat,
     TranslationMetadata,
@@ -88,6 +94,34 @@ def display_cost_estimate(estimate, model: ModelType) -> None:
             console.print(f"• {warning}")
 
 
+def parse_model_spec(model_spec: str) -> tuple[ModelType, str]:
+    """Parse a model specification string.
+
+    Args:
+        model_spec: Model specification (e.g., 'openai:gpt-4o', 'anthropic:claude-3-sonnet', 'ollama:mistral-small')
+
+    Returns:
+        Tuple of (ModelType, str) for the provider and model name.
+
+    Raises:
+        ValueError: If the model specification is invalid
+    """
+    if ":" not in model_spec:
+        raise ValueError(
+            "Invalid model specification. Use format 'provider:model' "
+            "(e.g., 'openai:gpt-4o', 'anthropic:claude-3-sonnet', 'ollama:mistral-small')"
+        )
+
+    provider, model = model_spec.split(":", 1)
+    try:
+        return ModelType(provider.lower()), model
+    except ValueError:
+        raise ValueError(
+            f"Unknown model provider: {provider}. "
+            f"Supported providers: {', '.join(m.value for m in ModelType)}"
+        )
+
+
 @app.command()
 def translate(
     input_file: Path = typer.Argument(
@@ -107,7 +141,7 @@ def translate(
     output_format: OutputFormat = typer.Option(
         OutputFormat.TEXT,
         "--format",
-        "-f",
+        "-F",
         help="Output format (text, json, or markdown).",
     ),
     source_lang: str = typer.Option(
@@ -122,11 +156,11 @@ def translate(
         "-t",
         help="Target language code. Defaults to 'en' (English).",
     ),
-    model: ModelType = typer.Option(
-        ModelType.CLAUDE_3_SONNET,
+    model: str = typer.Option(
+        "anthropic:claude-3-sonnet",
         "--model",
         "-m",
-        help="The model to use for translation.",
+        help="Model to use (e.g., 'openai:gpt-4o', 'anthropic:claude-3-sonnet', 'ollama:mistral-small').",
     ),
     algorithm: str = typer.Option(
         "page",
@@ -157,19 +191,22 @@ def translate(
 ) -> None:
     """Translate a document using LLMs."""
     try:
+        # Parse model specification
+        model_type, model_name = parse_model_spec(model)
+
         # Determine file type
         file_type = FileType(input_file.suffix.lstrip(".").lower())
 
         # Get cost estimate
         estimate = estimate_cost(
             input_file,
-            model,
+            model_type,
             max_cost=max_cost,
         )
 
         # Display cost estimate
         console.print("\n[bold]Translation Plan[/bold]")
-        display_cost_estimate(estimate, model)
+        display_cost_estimate(estimate, model_type)
 
         # In dry-run mode, exit after showing estimate
         if dry_run:
@@ -185,24 +222,25 @@ def translate(
                 console.print("\nTranslation cancelled.")
                 raise typer.Exit(1)
 
-        # Create configuration
+        # Create translation config
         config = TranslationConfig(
             source_lang=source_lang or "auto",
             target_lang=target_lang,
-            model=model,
+            model=model_type,
+            model_name=model_name,
             algorithm=algorithm,
             input_file=input_file,
             output_file=output_file,
-            verbose=verbose,
-            max_cost=max_cost,
             force=force,
+            max_cost=max_cost,
+            verbose=verbose,
         )
 
         # Load document
         content = asyncio.run(load_document(input_file))
 
         # Initialize model interface
-        translator = ModelInterface()
+        translator = create_translator(config)
 
         # Show progress
         with Progress(
@@ -211,13 +249,21 @@ def translate(
             console=console,
         ) as progress:
             # Run translation
-            result = asyncio.run(
+            response = asyncio.run(
                 translate_document(
                     content=content,
                     config=config,
                     translator=translator,
                     progress=progress,
                 )
+            )
+
+            # Convert TranslationResponse to TranslationResult
+            result = TranslationResult(
+                text=response.text,
+                tokens_used=response.tokens_used,
+                cost=response.cost,
+                time_taken=response.time_taken,
             )
 
         # Create translation output with metadata
@@ -246,7 +292,7 @@ def translate(
 
             table.add_row("Time Taken", f"{result.time_taken:.1f} seconds")
             table.add_row("Tokens Used", f"{result.tokens_used:,}")
-            if model != ModelType.OLLAMA:
+            if model_type != ModelType.OLLAMA:
                 table.add_row("Final Cost", f"${result.cost:.4f}")
 
             console.print("\n", table)

@@ -6,9 +6,15 @@ from typing import Optional
 
 from rich.progress import Progress, TaskID
 
-from tinbox.core.processor import DocumentContent, DocumentPages
+from tinbox.core.processor import DocumentContent
 from tinbox.core.progress import ProgressTracker
-from tinbox.core.translation.checkpoint import CheckpointManager, TranslationState
+from tinbox.core.translation.checkpoint import (
+    CheckpointManager,
+    TranslationState,
+    should_resume,
+    load_checkpoint,
+    save_checkpoint,
+)
 from tinbox.core.translation.interface import (
     ModelInterface,
     TranslationError,
@@ -90,181 +96,115 @@ async def translate_document(
     config: TranslationConfig,
     translator: ModelInterface,
     progress: Optional[Progress] = None,
-) -> TranslationResult:
-    """Main translation function that delegates to appropriate algorithm.
+) -> TranslationResponse:
+    """Translate a document using the specified algorithm.
 
     Args:
-        content: Document content to translate
+        content: The document content to translate
         config: Translation configuration
-        translator: Model interface for translation
-        progress: Optional progress tracking
+        translator: Model interface to use
+        progress: Optional progress bar
 
     Returns:
-        Translation result with combined text and metadata
+        Translation result
 
     Raises:
         TranslationError: If translation fails
     """
     if config.algorithm == "page":
-        return await translate_page_by_page(content.pages, config, translator, progress)
+        return await translate_page_by_page(content, config, translator, progress)
+    elif config.algorithm == "sliding-window":
+        return await translate_sliding_window(content, config, translator, progress)
     else:
-        return await translate_sliding_window(
-            content.pages, config, translator, progress
-        )
+        raise TranslationError(f"Unknown algorithm: {config.algorithm}")
 
 
 async def translate_page_by_page(
-    content: DocumentPages,
+    content: DocumentContent,
     config: TranslationConfig,
     translator: ModelInterface,
     progress: Optional[Progress] = None,
-) -> TranslationResult:
-    """Translate document page by page with seam repair.
+) -> TranslationResponse:
+    """Translate a document page by page.
 
     Args:
-        content: Document content to translate
+        content: The document content to translate
         config: Translation configuration
-        translator: Model interface for translation
-        progress: Optional progress tracking
+        translator: Model interface to use
+        progress: Optional progress bar
 
     Returns:
-        Translation result with combined text and metadata
+        Translation result
 
     Raises:
         TranslationError: If translation fails
     """
-    # Initialize checkpoint manager if configured
-    checkpoint_manager = None
-    if config.checkpoint_dir:
-        checkpoint_manager = CheckpointManager(config.checkpoint_dir)
-
-    # Try to resume from checkpoint
-    initial_state = None
-    if checkpoint_manager and config.resume_from_checkpoint:
-        initial_state = checkpoint_manager.load_checkpoint(config.input_file)
-
-    # Initialize progress tracking
-    task_id = None
-    if progress:
-        task_id = progress.add_task(
-            description="Translating pages...",
-            total=len(content.pages),
-        )
-
-    # Estimate total tokens (rough estimate)
-    total_tokens = len(content.pages) * 500  # Rough estimate of 500 tokens per page
-
-    tracker = ProgressTracker(
-        total_tokens=total_tokens,
-        total_pages=len(content.pages),
-        progress=progress,
-        task_id=task_id,
-        callback=config.progress_callback,
-        verbose=config.verbose,
-    )
-
-    # Initialize state from checkpoint if available
-    translated_chunks = {}
-    if initial_state:
-        for i in range(1, len(initial_state.completed_pages) + 1):
-            translated_chunks[i] = initial_state.translated_chunks[i]
-            tracker.update(
-                tokens_processed=500,  # Rough estimate
-                cost=initial_state.cost / len(initial_state.completed_pages),
-                page_completed=True,
-            )
+    total_tokens = 0
+    total_cost = 0.0
+    translated_pages = []
+    task_id: Optional[TaskID] = None
 
     try:
-        # Translate each page
-        for i, page in enumerate(content.pages, start=1):
-            # Skip already translated pages
-            if initial_state and i in initial_state.completed_pages:
-                continue
-
-            try:
-                # Create translation request
-                request = TranslationRequest(
-                    source_lang=config.source_lang,
-                    target_lang=config.target_lang,
-                    content=page,
-                    content_type=content.content_type,
-                    model=config.model,
-                )
-
-                # Translate page
-                response = await translator.translate(request)
-                translated_chunks[i] = response.text
-                tracker.update(
-                    tokens_processed=response.tokens_used,
-                    cost=response.cost,
-                    page_completed=True,
-                )
-
-                # Save checkpoint if configured
-                if checkpoint_manager and i % config.checkpoint_frequency == 0:
-                    state = TranslationState(
-                        input_file=config.input_file,
-                        source_lang=config.source_lang,
-                        target_lang=config.target_lang,
-                        algorithm="page",
-                        completed_pages=list(range(1, i + 1)),
-                        failed_pages=tracker.stats.failed_pages,  # Include failed pages from tracker
-                        translated_chunks=translated_chunks,
-                        token_usage=tracker.stats.tokens_processed,
-                        cost=tracker.stats.cost,
-                        time_taken=tracker.stats.time_taken,
-                    )
-                    checkpoint_manager.save_checkpoint(state)
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to translate page {i}",
-                    error=str(e),
-                    page=i,
-                )
-                # Track failed page
-                tracker.update(
-                    tokens_processed=0,
-                    cost=0.0,
-                    page_failed=i,
-                )
-                # Continue with next page
-                continue
-
-        if not translated_chunks:
-            failed_pages = sorted(tracker.stats.failed_pages)
-            raise TranslationError(
-                f"No pages were successfully translated. Failed pages: {failed_pages}"
+        # Set up progress tracking
+        if progress:
+            task_id = progress.add_task(
+                "Translating pages...",
+                total=len(content.pages),
             )
 
-        # Convert chunks to list in order
-        translated_pages = [
-            translated_chunks[i]
-            for i in range(1, len(content.pages) + 1)
-            if i in translated_chunks
-        ]
+        # Check for checkpoint
+        if should_resume(config):
+            checkpoint = load_checkpoint(config)
+            if checkpoint:
+                translated_pages = checkpoint.pages
+                total_tokens = checkpoint.tokens_used
+                total_cost = checkpoint.cost
+                if progress and task_id is not None:
+                    progress.update(task_id, completed=len(translated_pages))
 
-        # Repair seams if needed
-        if len(translated_pages) > 1:
-            final_text = await repair_seams(
-                translated_pages,
-                config,
-                translator,
+        # Translate remaining pages
+        for i, page in enumerate(
+            content.pages[len(translated_pages) :], len(translated_pages)
+        ):
+            # Create translation request
+            request = TranslationRequest(
+                source_lang=config.source_lang,
+                target_lang=config.target_lang,
+                content=page,
+                content_type=content.content_type,
+                model=config.model,
+                model_params={"model_name": config.model_name}
+                if config.model_name
+                else {},
             )
-        elif translated_pages:  # Check if we have at least one page
-            final_text = translated_pages[0]
-        else:
-            raise TranslationError("No valid translations available")
 
-        # Clean up old checkpoints
-        if checkpoint_manager:
-            checkpoint_manager.cleanup_old_checkpoints(config.input_file)
+            # Translate page
+            response = await translator.translate(request)
+            translated_pages.append(response.text)
+            total_tokens += response.tokens_used
+            total_cost += response.cost
 
-        return TranslationResult(
+            # Update progress
+            if progress and task_id is not None:
+                progress.update(task_id, advance=1)
+
+            # Save checkpoint if needed
+            if config.checkpoint_dir and (i + 1) % config.checkpoint_frequency == 0:
+                await save_checkpoint(
+                    config=config,
+                    pages=translated_pages,
+                    tokens_used=total_tokens,
+                    cost=total_cost,
+                )
+
+        # Join pages with double newlines
+        final_text = "\n\n".join(translated_pages)
+
+        return TranslationResponse(
             text=final_text,
-            tokens_used=tracker.stats.tokens_processed,
-            cost=tracker.stats.cost,
-            time_taken=tracker.stats.time_taken,
+            tokens_used=total_tokens,
+            cost=total_cost,
+            time_taken=0.0,  # Will be set by caller
         )
 
     except Exception as e:
@@ -272,166 +212,50 @@ async def translate_page_by_page(
 
 
 async def translate_sliding_window(
-    content: DocumentPages,
+    content: DocumentContent,
     config: TranslationConfig,
     translator: ModelInterface,
     progress: Optional[Progress] = None,
-) -> TranslationResult:
-    """Translate document using sliding window approach.
+) -> TranslationResponse:
+    """Translate a document using sliding window algorithm.
 
     Args:
-        content: Document content to translate
+        content: The document content to translate
         config: Translation configuration
-        translator: Model interface for translation
-        progress: Optional progress tracking
+        translator: Model interface to use
+        progress: Optional progress bar
 
     Returns:
-        Translation result with combined text and metadata
+        Translation result
 
     Raises:
         TranslationError: If translation fails
     """
-    if not isinstance(content.content, str):
-        raise TranslationError("Sliding window translation only supports text content")
-
-    # Initialize checkpoint manager if configured
-    checkpoint_manager = None
-    if config.checkpoint_dir:
-        checkpoint_manager = CheckpointManager(config.checkpoint_dir)
-
-    # Try to resume from checkpoint
-    initial_state = None
-    if checkpoint_manager and config.resume_from_checkpoint:
-        initial_state = checkpoint_manager.load_checkpoint(config.input_file)
-
-    # Create windows
-    text = content.content
-    windows = create_windows(
-        text,
-        window_size=config.window_size,
-        overlap_size=config.overlap_size,
-    )
-
-    # Initialize progress tracking
-    task_id = None
-    if progress:
-        task_id = progress.add_task(
-            description="Translating chunks...",
-            total=len(windows),
+    if isinstance(content.pages[0], bytes):
+        raise TranslationError(
+            "Sliding window algorithm not supported for image content"
         )
-
-    # Estimate total tokens (rough estimate)
-    total_tokens = len(text) // 4  # Rough estimate of 1 token per 4 characters
-
-    tracker = ProgressTracker(
-        total_tokens=total_tokens,
-        total_pages=len(windows),  # Treat windows as pages
-        progress=progress,
-        task_id=task_id,
-        callback=config.progress_callback,
-        verbose=config.verbose,
-    )
-
-    # Initialize state from checkpoint if available
-    translated_chunks = {}
-    if initial_state:
-        for i in range(1, len(initial_state.completed_pages) + 1):
-            translated_chunks[i] = initial_state.translated_chunks[i]
-            tracker.update(
-                tokens_processed=len(initial_state.translated_chunks[i])
-                // 4,  # Rough estimate
-                cost=initial_state.cost / len(initial_state.completed_pages),
-                page_completed=True,
-            )
 
     try:
-        # Translate each window
-        for i, window in enumerate(windows, start=1):
-            # Skip already translated windows
-            if initial_state and i in initial_state.completed_pages:
-                continue
+        # Join all pages into single text
+        text = "\n\n".join(content.pages)
 
-            try:
-                # Create translation request
-                request = TranslationRequest(
-                    source_lang=config.source_lang,
-                    target_lang=config.target_lang,
-                    content=window,
-                    content_type="text/plain",
-                    model=config.model,
-                )
-
-                # Translate window
-                response = await translator.translate(request)
-                translated_chunks[i] = response.text
-                tracker.update(
-                    tokens_processed=response.tokens_used,
-                    cost=response.cost,
-                    page_completed=True,
-                )
-
-                # Save checkpoint if configured
-                if checkpoint_manager and i % config.checkpoint_frequency == 0:
-                    state = TranslationState(
-                        input_file=config.input_file,
-                        source_lang=config.source_lang,
-                        target_lang=config.target_lang,
-                        algorithm="sliding-window",
-                        completed_pages=list(range(1, i + 1)),
-                        failed_pages=tracker.stats.failed_pages,  # Include failed pages from tracker
-                        translated_chunks=translated_chunks,
-                        token_usage=tracker.stats.tokens_processed,
-                        cost=tracker.stats.cost,
-                        time_taken=tracker.stats.time_taken,
-                    )
-                    checkpoint_manager.save_checkpoint(state)
-
-            except Exception as e:
-                logger.error(
-                    f"Failed to translate window {i}",
-                    error=str(e),
-                    window=i,
-                )
-                # Track failed page
-                tracker.update(
-                    tokens_processed=0,
-                    cost=0.0,
-                    page_failed=i,
-                )
-                # Continue with next window
-                continue
-
-        if not translated_chunks:
-            failed_pages = sorted(tracker.stats.failed_pages)
-            raise TranslationError(
-                f"No chunks were successfully translated. Failed pages: {failed_pages}"
-            )
-
-        # Convert chunks to list in order
-        translated_chunks_list = [
-            translated_chunks[i]
-            for i in range(1, len(windows) + 1)
-            if i in translated_chunks
-        ]
-
-        # Merge chunks
-        final_text = merge_chunks(
-            translated_chunks_list,
-            overlap_size=config.overlap_size,
+        # Create translation request
+        request = TranslationRequest(
+            source_lang=config.source_lang,
+            target_lang=config.target_lang,
+            content=text,
+            content_type="text/plain",
+            model=config.model,
+            model_params={"model_name": config.model_name} if config.model_name else {},
         )
 
-        # Clean up old checkpoints
-        if checkpoint_manager:
-            checkpoint_manager.cleanup_old_checkpoints(config.input_file)
-
-        return TranslationResult(
-            text=final_text,
-            tokens_used=tracker.stats.tokens_processed,
-            cost=tracker.stats.cost,
-            time_taken=tracker.stats.time_taken,
-        )
+        # Translate entire text
+        response = await translator.translate(request)
+        return response
 
     except Exception as e:
+        logger.exception("Translation failed")
         raise TranslationError(f"Translation failed: {str(e)}") from e
 
 

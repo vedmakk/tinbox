@@ -1,6 +1,5 @@
-"""Cost estimation functionality for Tinbox."""
+"""Cost estimation utilities."""
 
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Dict, Optional
@@ -8,30 +7,19 @@ from typing import Dict, Optional
 from tinbox.core.types import FileType, ModelType
 
 
-class CostLevel(Enum):
-    """Cost level indicators."""
+class CostLevel(str, Enum):
+    """Cost level classification."""
 
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    VERY_HIGH = "very_high"
-
-
-@dataclass
-class CostEstimate:
-    """Cost estimate for a translation job."""
-
-    estimated_tokens: int
-    estimated_cost: float
-    cost_level: CostLevel
-    estimated_time: float  # in seconds
-    warnings: list[str]
+    LOW = "low"  # < $1
+    MEDIUM = "medium"  # $1-$5
+    HIGH = "high"  # $5-$20
+    VERY_HIGH = "very_high"  # > $20
 
 
 # Approximate costs per 1K tokens (as of March 2024)
 MODEL_COSTS: Dict[ModelType, float] = {
-    ModelType.GPT4O: 0.03,  # $0.03 per 1K input tokens, $0.06 per 1K output tokens
-    ModelType.CLAUDE_3_SONNET: 0.003,  # $0.003 per 1K input tokens, $0.015 per 1K output tokens
+    ModelType.OPENAI: 0.03,  # $0.03 per 1K input tokens, $0.06 per 1K output tokens
+    ModelType.ANTHROPIC: 0.003,  # $0.003 per 1K input tokens, $0.015 per 1K output tokens
     ModelType.OLLAMA: 0.0,  # Free for local models
 }
 
@@ -78,7 +66,14 @@ def estimate_document_tokens(file_path: Path) -> int:
 
 
 def get_cost_level(cost: float) -> CostLevel:
-    """Determine cost level based on estimated cost."""
+    """Get the cost level classification.
+
+    Args:
+        cost: Estimated cost in USD
+
+    Returns:
+        Cost level classification
+    """
     if cost < 1.0:
         return CostLevel.LOW
     elif cost < 5.0:
@@ -87,6 +82,31 @@ def get_cost_level(cost: float) -> CostLevel:
         return CostLevel.HIGH
     else:
         return CostLevel.VERY_HIGH
+
+
+class CostEstimate:
+    """Cost estimate for a translation task."""
+
+    def __init__(
+        self,
+        estimated_tokens: int,
+        estimated_cost: float,
+        estimated_time: float,
+        warnings: list[str],
+    ) -> None:
+        """Initialize cost estimate.
+
+        Args:
+            estimated_tokens: Estimated number of tokens
+            estimated_cost: Estimated cost in USD
+            estimated_time: Estimated time in seconds
+            warnings: List of warning messages
+        """
+        self.estimated_tokens = estimated_tokens
+        self.estimated_cost = estimated_cost
+        self.estimated_time = estimated_time
+        self.warnings = warnings
+        self.cost_level = get_cost_level(estimated_cost)
 
 
 def estimate_cost(
@@ -133,7 +153,6 @@ def estimate_cost(
     return CostEstimate(
         estimated_tokens=estimated_tokens,
         estimated_cost=estimated_cost,
-        cost_level=get_cost_level(estimated_cost),
         estimated_time=estimated_time,
         warnings=warnings,
     )

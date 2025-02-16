@@ -70,6 +70,7 @@ tinbox [OPTIONS] <input-file>
 | `--algorithm, -a <ALGO>`       | Translation algorithm. One of `page`, `sliding-window`. Defaults to `page`.                          |
 | `--model <MODEL_NAME>`         | Model/provider (e.g., `gpt-4o`, `claude-3-5-sonnet`, `olama:mistral-small`).                                      |
 | `--output, -o <OUTPUT_FILE>`   | Output file path. If not provided, writes to stdout.                                                 |
+| `--format, -F <FORMAT>`        | Output format (text, json, or markdown). Defaults to text.                                           |
 | `--benchmark, -b`              | Enable benchmarking mode.                                                                            |
 
 ### 2. Supported Language Codes

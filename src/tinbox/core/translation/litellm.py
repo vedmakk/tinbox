@@ -36,6 +36,45 @@ class LiteLLMTranslator(ModelInterface):
         self.max_tokens = max_tokens
         self._logger = logger
 
+    def _get_model_string(self, request: TranslationRequest) -> str:
+        """Get the model string for LiteLLM.
+
+        Args:
+            request: The translation request
+
+        Returns:
+            Model string for LiteLLM
+
+        Raises:
+            TranslationError: If model name is missing
+        """
+        if not request.model_params.get("model_name"):
+            raise TranslationError("No model name provided")
+
+        model_name = request.model_params["model_name"]
+
+        # If model name already includes provider prefix, use it directly
+        if "/" in model_name:  # Using / instead of : as that's what litellm expects
+            return model_name
+
+        # Handle provider-specific model strings
+        if request.model == ModelType.OLLAMA:
+            return f"ollama/{model_name}"
+        elif request.model == ModelType.OPENAI:
+            return model_name  # OpenAI models use their names directly
+        elif request.model == ModelType.ANTHROPIC:
+            # Anthropic models need anthropic/ prefix according to litellm docs
+            # Replace : with / if present in the model name
+            clean_name = model_name.replace(":", "/")
+            return f"anthropic/{clean_name}"
+        elif request.model == ModelType.GEMINI:
+            # Gemini models need gemini/ prefix according to litellm docs
+            # Replace : with / if present in the model name
+            clean_name = model_name.replace(":", "/")
+            return f"gemini/{clean_name}"
+        else:
+            raise TranslationError(f"Unsupported model provider: {request.model}")
+
     def _create_prompt(self, request: TranslationRequest) -> list[dict]:
         """Create the prompt for the model.
 
@@ -68,7 +107,7 @@ class LiteLLMTranslator(ModelInterface):
                     "content": [
                         {
                             "type": "text",
-                            "text": f"Translate this image from {request.source_lang} to {request.target_lang}",
+                            "text": f"Translate the contents of the image from {request.source_lang} to {request.target_lang}",
                         },
                         {
                             "type": "image_url",
@@ -110,12 +149,16 @@ class LiteLLMTranslator(ModelInterface):
 
                     try:
                         response = completion(
-                            model=request.model.value,
+                            model=self._get_model_string(request),
                             messages=self._create_prompt(request),
                             temperature=self.temperature,
                             max_tokens=self.max_tokens,
                             stream=True,
-                            **request.model_params,
+                            **{
+                                k: v
+                                for k, v in request.model_params.items()
+                                if k != "model_name"
+                            },
                         )
 
                         async for chunk in response:
@@ -145,12 +188,16 @@ class LiteLLMTranslator(ModelInterface):
                 # For non-streaming, make a single request
                 try:
                     response = completion(
-                        model=request.model.value,
+                        model=self._get_model_string(request),
                         messages=self._create_prompt(request),
                         temperature=self.temperature,
                         max_tokens=self.max_tokens,
                         stream=False,
-                        **request.model_params,
+                        **{
+                            k: v
+                            for k, v in request.model_params.items()
+                            if k != "model_name"
+                        },
                     )
 
                     if not hasattr(response, "choices") or not response.choices:
@@ -182,7 +229,7 @@ class LiteLLMTranslator(ModelInterface):
         try:
             # Make a minimal test request
             response = completion(
-                model=ModelType.GPT4O.value,  # Use GPT-4o for validation
+                model="gpt-3.5-turbo",  # Use a simple model for validation
                 messages=[{"role": "user", "content": "test"}],
                 max_tokens=1,
             )
