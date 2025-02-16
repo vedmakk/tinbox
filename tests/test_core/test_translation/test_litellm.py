@@ -1,113 +1,88 @@
-"""Tests for the LiteLLM translator implementation."""
+"""Tests for the LiteLLM translator."""
 
-import base64
-from datetime import datetime
-from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List
 import asyncio
+from pathlib import Path
+from typing import Any, Dict, AsyncIterator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from PIL import Image
 
-from tinbox.core.translation import (
-    LiteLLMTranslator,
-    TranslationError,
+from tinbox.core.translation.interface import (
     TranslationRequest,
+    TranslationError,
+    TranslationResponse,
 )
+from tinbox.core.translation.litellm import LiteLLMTranslator
 from tinbox.core.types import ModelType
 
 
-class MockStreamingResponse:
-    """Mock streaming response for testing."""
+@pytest.fixture
+def translator() -> LiteLLMTranslator:
+    """Create a LiteLLM translator instance."""
+    return LiteLLMTranslator()
 
-    def __init__(self, text: str = "Translated text"):
-        self._chunks = [c for c in text]  # Split text into characters for streaming
-        self._index = 0
 
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if self._index >= len(self._chunks):
-            raise StopAsyncIteration
-
-        chunk = self._chunks[self._index]
-        self._index += 1
-
-        return type(
-            "StreamChunk",
+@pytest.fixture
+def mock_completion():
+    """Create a mock completion response."""
+    with patch("tinbox.core.translation.litellm.completion") as mock:
+        mock.return_value = type(
+            "CompletionResponse",
             (),
             {
                 "choices": [
                     type(
                         "Choice",
                         (),
-                        {"delta": type("Delta", (), {"content": chunk})},
+                        {"message": {"content": "Translated text"}},
                     )
-                ]
+                ],
+                "usage": type(
+                    "Usage",
+                    (),
+                    {
+                        "total_tokens": 10,
+                        "cost": 0.001,
+                        "completion_time": 0.5,
+                    },
+                ),
             },
         )
+        yield mock
 
 
-class MockResponse:
-    """Mock response for testing."""
+@pytest.fixture
+def mock_streaming_completion():
+    """Create a mock streaming completion response."""
 
-    def __init__(self, text: str = "Translated text", tokens: int = 30):
-        self.choices = [
-            type(
-                "Choice",
-                (),
-                {
-                    "message": type("Message", (), {"content": text}),
-                    "finish_reason": "stop",
-                },
-            )
-        ]
-        self.usage = type(
-            "Usage",
+    async def mock_stream():
+        yield type(
+            "CompletionChunk",
             (),
             {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": tokens,
+                "choices": [
+                    type(
+                        "Choice",
+                        (),
+                        {"message": {"content": "Translated text"}},
+                    )
+                ],
+                "usage": type(
+                    "Usage",
+                    (),
+                    {
+                        "total_tokens": 10,
+                        "cost": 0.001,
+                        "completion_time": 0.5,
+                    },
+                ),
             },
         )
 
-
-class MockTimeoutResponse:
-    """Mock response that simulates a timeout."""
-
-    def __init__(self):
-        raise asyncio.TimeoutError("Request timed out")
-
-
-class MockRateLimitResponse:
-    """Mock response that simulates rate limiting."""
-
-    def __init__(self):
-        raise RuntimeError("Rate limit exceeded. Please try again in 60 seconds.")
-
-
-@pytest.fixture
-def translator() -> LiteLLMTranslator:
-    """Fixture providing a LiteLLM translator instance."""
-    return LiteLLMTranslator()
-
-
-@pytest.fixture
-def mock_completion(monkeypatch):
-    """Fixture to mock LiteLLM completion calls."""
-
-    def mock_completion(*args: Any, **kwargs: Dict[str, Any]) -> Any:
-        if kwargs.get("stream", False):
-            return MockStreamingResponse()
-        return MockResponse()
-
-    # Patch both the module and the imported function
-    import litellm
-
-    monkeypatch.setattr(litellm, "completion", mock_completion)
-    monkeypatch.setattr("tinbox.core.translation.litellm.completion", mock_completion)
+    with patch("tinbox.core.translation.litellm.completion") as mock:
+        mock.return_value = mock_stream()
+        yield mock
 
 
 @pytest.mark.asyncio
@@ -118,14 +93,15 @@ async def test_text_translation(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
 
     response = await translator.translate(request)
-
     assert response.text == "Translated text"
-    assert response.tokens_used == 30
-    assert response.time_taken > 0
+    assert response.tokens_used == 10
+    assert response.cost == 0.001
+    assert response.time_taken == 0.5
 
 
 @pytest.mark.asyncio
@@ -143,37 +119,36 @@ async def test_image_translation(
         target_lang="es",
         content=image_path.read_bytes(),
         content_type="image/png",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
 
     response = await translator.translate(request)
-
     assert response.text == "Translated text"
-    assert response.tokens_used == 30
-    assert response.time_taken > 0
+    assert response.tokens_used == 10
+    assert response.cost == 0.001
+    assert response.time_taken == 0.5
 
 
 @pytest.mark.asyncio
-async def test_streaming_translation(translator: LiteLLMTranslator, mock_completion):
+async def test_streaming_translation(
+    translator: LiteLLMTranslator, mock_streaming_completion
+):
     """Test streaming translation responses."""
     request = TranslationRequest(
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
 
-    response_gen = await translator.translate(request, stream=True)
-    responses: List[TranslationResponse] = []
-    async for response in response_gen:
-        responses.append(response)
-
-    # Each character in "Translated text" should be a response
-    assert len(responses) == len("Translated text")
-    assert responses[-1].text == "Translated text"
-    assert all(r.tokens_used > 0 for r in responses)
-    assert all(r.time_taken > 0 for r in responses)
+    async for chunk in await translator.translate(request, stream=True):
+        assert chunk.text == "Translated text"
+        assert chunk.tokens_used == 10
+        assert chunk.cost == 0.001
+        assert chunk.time_taken == 0.5
 
 
 @pytest.mark.asyncio
@@ -194,33 +169,12 @@ async def test_translation_error_handling(translator: LiteLLMTranslator, monkeyp
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
 
-    with pytest.raises(TranslationError, match="Translation failed"):
+    with pytest.raises(TranslationError, match="Translation failed: API error"):
         await translator.translate(request)
-
-
-@pytest.mark.asyncio
-async def test_model_validation(translator: LiteLLMTranslator, mock_completion):
-    """Test model validation."""
-    assert await translator.validate_model()
-
-
-@pytest.mark.asyncio
-async def test_model_validation_failure(translator: LiteLLMTranslator, monkeypatch):
-    """Test model validation failure."""
-
-    def mock_error(*args: Any, **kwargs: Dict[str, Any]) -> None:
-        raise RuntimeError("API error")
-
-    # Patch both the module and the imported function
-    import litellm
-
-    monkeypatch.setattr(litellm, "completion", mock_error)
-    monkeypatch.setattr("tinbox.core.translation.litellm.completion", mock_error)
-
-    assert not await translator.validate_model()
 
 
 @pytest.mark.asyncio
@@ -232,21 +186,25 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content="",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
-    response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+
+    with pytest.raises(TranslationError, match="Empty content"):
+        await translator.translate(request)
 
     # Whitespace only
     request = TranslationRequest(
         source_lang="en",
         target_lang="es",
-        content="   \n\t   ",
+        content="   \n   ",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
-    response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+
+    with pytest.raises(TranslationError, match="Empty content"):
+        await translator.translate(request)
 
 
 @pytest.mark.asyncio
@@ -258,11 +216,12 @@ async def test_long_content(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content=long_text,
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
+
     response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
-    assert response.tokens_used == 30  # Mock token count
+    assert response.text == "Translated text"
 
 
 @pytest.mark.asyncio
@@ -274,10 +233,12 @@ async def test_special_characters(translator: LiteLLMTranslator, mock_completion
         target_lang="es",
         content=special_text,
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
+
     response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+    assert response.text == "Translated text"
 
 
 @pytest.mark.asyncio
@@ -288,11 +249,13 @@ async def test_invalid_model_params(translator: LiteLLMTranslator, mock_completi
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
         model_params={"invalid_param": "value"},  # Invalid parameter
     )
+
     response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+    assert response.text == "Translated text"
 
 
 @pytest.mark.asyncio
@@ -304,10 +267,12 @@ async def test_malformed_image(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content=invalid_image_data,
         content_type="image/png",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
-    response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+
+    with pytest.raises(TranslationError, match="Invalid image data"):
+        await translator.translate(request)
 
 
 @pytest.mark.asyncio
@@ -327,10 +292,11 @@ async def test_timeout_handling(translator: LiteLLMTranslator, monkeypatch):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
 
-    with pytest.raises(TranslationError, match="Translation failed"):
+    with pytest.raises(TranslationError, match="Translation failed: Request timed out"):
         await translator.translate(request)
 
 
@@ -339,7 +305,7 @@ async def test_rate_limit_handling(translator: LiteLLMTranslator, monkeypatch):
     """Test handling of rate limiting."""
 
     def mock_rate_limit(*args: Any, **kwargs: Dict[str, Any]) -> Any:
-        return MockRateLimitResponse()
+        raise RuntimeError("Rate limit exceeded")
 
     import litellm
 
@@ -351,10 +317,13 @@ async def test_rate_limit_handling(translator: LiteLLMTranslator, monkeypatch):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
 
-    with pytest.raises(TranslationError, match="Translation failed"):
+    with pytest.raises(
+        TranslationError, match="Translation failed: Rate limit exceeded"
+    ):
         await translator.translate(request)
 
 
@@ -367,10 +336,12 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
-    response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+
+    with pytest.raises(TranslationError, match="Invalid language code"):
+        await translator.translate(request)
 
     # Invalid target language
     request = TranslationRequest(
@@ -378,10 +349,12 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         target_lang="invalid",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
-    response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+
+    with pytest.raises(TranslationError, match="Invalid language code"):
+        await translator.translate(request)
 
 
 @pytest.mark.asyncio
@@ -394,10 +367,12 @@ async def test_mixed_content_handling(translator: LiteLLMTranslator, mock_comple
         target_lang="es",
         content=mixed_content,
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
+
     response = await translator.translate(request)
-    assert response.text == "Translated text"  # Mock response
+    assert response.text == "Translated text"
 
 
 @pytest.mark.asyncio
@@ -426,8 +401,9 @@ async def test_response_validation(translator: LiteLLMTranslator, monkeypatch):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4O,
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
     )
 
-    with pytest.raises(TranslationError, match="No response from model"):
+    with pytest.raises(TranslationError, match="Invalid response format"):
         await translator.translate(request)

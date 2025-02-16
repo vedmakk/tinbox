@@ -7,14 +7,14 @@ import pytest
 from PIL import Image
 
 from tinbox.core.processor import DocumentContent, DocumentMetadata, ProcessingError
-from tinbox.core.processors.pdf import PDFProcessor
+from tinbox.core.processor.pdf import PdfProcessor
 from tinbox.core.types import FileType
 
 
 @pytest.fixture
-def processor() -> PDFProcessor:
+def processor() -> PdfProcessor:
     """Fixture providing a PDF processor instance."""
-    return PDFProcessor()
+    return PdfProcessor()
 
 
 @pytest.fixture
@@ -24,13 +24,14 @@ def sample_pdf() -> Path:
 
 
 @pytest.mark.asyncio
-async def test_pdf_processor_metadata(processor: PDFProcessor, sample_pdf: Path):
+async def test_pdf_processor_metadata(processor: PdfProcessor, sample_pdf: Path):
     """Test PDF metadata extraction."""
     metadata = await processor.get_metadata(sample_pdf)
 
     assert isinstance(metadata, DocumentMetadata)
     assert metadata.file_type == FileType.PDF
     assert metadata.total_pages > 0  # Should have at least one page
+    assert metadata.title == sample_pdf.name
 
     # These might be None, but should exist
     assert hasattr(metadata, "title")
@@ -39,42 +40,31 @@ async def test_pdf_processor_metadata(processor: PDFProcessor, sample_pdf: Path)
     assert hasattr(metadata, "modification_date")
 
     # Custom metadata should include PDF-specific fields
-    assert "producer" in metadata.custom_metadata
-    assert "creator" in metadata.custom_metadata
+    assert "pdf_info" in metadata.custom_metadata
+    assert isinstance(metadata.custom_metadata["pdf_info"], dict)
 
 
 @pytest.mark.asyncio
 async def test_pdf_processor_content_extraction(
-    processor: PDFProcessor, sample_pdf: Path
+    processor: PdfProcessor, sample_pdf: Path
 ):
     """Test PDF content extraction."""
-    # Get first page
-    content_stream = processor.extract_content(sample_pdf, start_page=1, end_page=1)
-    content = await content_stream.__anext__()
+    content = None
+    async for page in processor.extract_content(sample_pdf, start_page=1, end_page=1):
+        content = page
+        break
 
-    assert isinstance(content, DocumentContent)
-    assert content.content_type == "image/png"
-    assert content.page_number == 1
-
-    # Verify image metadata
-    assert "dpi" in content.metadata
-    assert "format" in content.metadata
-    assert "width" in content.metadata
-    assert "height" in content.metadata
-
-    # Verify image content
-    image_bytes = content.content
-    assert isinstance(image_bytes, bytes)
+    assert isinstance(content, bytes)  # Should be PNG image bytes
 
     # Should be able to load as PIL Image
-    image = Image.open(io.BytesIO(image_bytes))
+    image = Image.open(io.BytesIO(content))
     assert image.format == "PNG"
     assert image.width > 0
     assert image.height > 0
 
 
 @pytest.mark.asyncio
-async def test_pdf_processor_multi_page(processor: PDFProcessor, sample_pdf: Path):
+async def test_pdf_processor_multi_page(processor: PdfProcessor, sample_pdf: Path):
     """Test multi-page PDF processing."""
     metadata = await processor.get_metadata(sample_pdf)
     total_pages = metadata.total_pages
@@ -85,12 +75,11 @@ async def test_pdf_processor_multi_page(processor: PDFProcessor, sample_pdf: Pat
         pages.append(content)
 
     assert len(pages) == total_pages
-    assert all(isinstance(p, DocumentContent) for p in pages)
-    assert [p.page_number for p in pages] == list(range(1, total_pages + 1))
+    assert all(isinstance(p, bytes) for p in pages)
 
 
 @pytest.mark.asyncio
-async def test_pdf_processor_page_range(processor: PDFProcessor, sample_pdf: Path):
+async def test_pdf_processor_page_range(processor: PdfProcessor, sample_pdf: Path):
     """Test PDF processing with specific page ranges."""
     # Process pages 2-3
     pages = []
@@ -100,14 +89,13 @@ async def test_pdf_processor_page_range(processor: PDFProcessor, sample_pdf: Pat
         pages.append(content)
 
     assert len(pages) == 2
-    assert [p.page_number for p in pages] == [2, 3]
 
 
 @pytest.mark.asyncio
-async def test_pdf_processor_invalid_file(processor: PDFProcessor, tmp_path: Path):
+async def test_pdf_processor_invalid_file(processor: PdfProcessor, tmp_path: Path):
     """Test handling of invalid files."""
     # Non-existent file
-    with pytest.raises(ProcessingError, match="does not exist"):
+    with pytest.raises(ProcessingError, match="File not found"):
         await processor.get_metadata(tmp_path / "nonexistent.pdf")
 
     # Invalid file type
@@ -119,16 +107,16 @@ async def test_pdf_processor_invalid_file(processor: PDFProcessor, tmp_path: Pat
 
 @pytest.mark.asyncio
 async def test_pdf_processor_invalid_page_range(
-    processor: PDFProcessor, sample_pdf: Path
+    processor: PdfProcessor, sample_pdf: Path
 ):
     """Test handling of invalid page ranges."""
     # Start page < 1
-    with pytest.raises(ProcessingError, match="start_page must be >= 1"):
+    with pytest.raises(ProcessingError, match="Invalid page range"):
         async for _ in processor.extract_content(sample_pdf, start_page=0):
             pass
 
     # End page < start page
-    with pytest.raises(ProcessingError, match="end_page must be >= start_page"):
+    with pytest.raises(ProcessingError, match="Invalid page range"):
         async for _ in processor.extract_content(sample_pdf, start_page=2, end_page=1):
             pass
 
@@ -137,16 +125,24 @@ async def test_pdf_processor_invalid_page_range(
 async def test_pdf_processor_dpi_settings(sample_pdf: Path):
     """Test PDF processing with different DPI settings."""
     # Create processors with different DPI settings
-    low_dpi = PDFProcessor(dpi=72)
-    high_dpi = PDFProcessor(dpi=300)
+    low_dpi = PdfProcessor({"dpi": 72})
+    high_dpi = PdfProcessor({"dpi": 300})
 
     # Get first page from each
-    low_content = await low_dpi.extract_content(sample_pdf, end_page=1).__anext__()
-    high_content = await high_dpi.extract_content(sample_pdf, end_page=1).__anext__()
+    low_content = None
+    high_content = None
+
+    async for content in low_dpi.extract_content(sample_pdf, end_page=1):
+        low_content = content
+        break
+
+    async for content in high_dpi.extract_content(sample_pdf, end_page=1):
+        high_content = content
+        break
 
     # High DPI should result in larger images
-    low_image = Image.open(io.BytesIO(low_content.content))
-    high_image = Image.open(io.BytesIO(high_content.content))
+    low_image = Image.open(io.BytesIO(low_content))
+    high_image = Image.open(io.BytesIO(high_content))
 
     assert high_image.width > low_image.width
     assert high_image.height > low_image.height

@@ -74,7 +74,7 @@ def test_estimate_document_tokens(tmp_path, file_type, content, expected_tokens)
     "model,tokens,expected_cost,expected_warnings",
     [
         (
-            ModelType.GPT4O,
+            ModelType.OPENAI,
             100_000,
             3.0,  # 100K tokens * $0.03 per 1K tokens
             [
@@ -82,7 +82,7 @@ def test_estimate_document_tokens(tmp_path, file_type, content, expected_tokens)
             ],
         ),
         (
-            ModelType.CLAUDE_3_SONNET,
+            ModelType.ANTHROPIC,
             25_000,
             0.075,  # 25K tokens * $0.003 per 1K tokens
             [],
@@ -123,7 +123,7 @@ def test_cost_threshold_warning():
     with patch("tinbox.core.cost.estimate_document_tokens", return_value=100_000):
         estimate = estimate_cost(
             file_path,
-            ModelType.GPT4O,
+            ModelType.OPENAI,
             max_cost=max_cost,
         )
         assert any(
@@ -138,7 +138,7 @@ def test_ollama_suggestion():
     file_path = Path("test.txt")
 
     with patch("tinbox.core.cost.estimate_document_tokens", return_value=100_000):
-        estimate = estimate_cost(file_path, ModelType.GPT4O)
+        estimate = estimate_cost(file_path, ModelType.OPENAI)
         assert any(
             "Consider using Ollama for better performance and no cost" in warning
             for warning in estimate.warnings

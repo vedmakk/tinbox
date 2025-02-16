@@ -22,7 +22,7 @@ def sample_output(tmp_path):
         metadata=TranslationMetadata(
             source_lang="en",
             target_lang="es",
-            model=ModelType.CLAUDE_3_SONNET,
+            model=ModelType.ANTHROPIC,
             algorithm="page",
             input_file=tmp_path / "test.txt",
             input_file_type=FileType.TXT,
@@ -72,7 +72,7 @@ def test_json_output(sample_output, tmp_path, capsys):
     # Verify content
     assert data["metadata"]["source_lang"] == "en"
     assert data["metadata"]["target_lang"] == "es"
-    assert data["metadata"]["model"] == "claude-3-sonnet"
+    assert data["metadata"]["model"] == "anthropic"
     assert data["result"]["text"] == "Translated text"
     assert data["result"]["tokens_used"] == 1500
     assert data["warnings"] == ["Large document detected"]
@@ -105,7 +105,7 @@ def test_markdown_output(sample_output, tmp_path, capsys):
     # Verify specific content
     assert "Source Language: en" in content
     assert "Target Language: es" in content
-    assert "Model: claude-3-sonnet" in content
+    assert "Model: anthropic" in content
     assert "```text\nTranslated text\n```" in content
     assert "Tokens Used: 1,500" in content
     assert "Cost: $0.0450" in content
@@ -126,7 +126,7 @@ def test_markdown_output_with_errors(tmp_path):
         metadata=TranslationMetadata(
             source_lang="en",
             target_lang="es",
-            model=ModelType.CLAUDE_3_SONNET,
+            model=ModelType.ANTHROPIC,
             algorithm="page",
             input_file=tmp_path / "test.txt",
             input_file_type=FileType.TXT,
@@ -166,7 +166,7 @@ def test_output_with_missing_data(tmp_path):
         metadata=TranslationMetadata(
             source_lang="en",
             target_lang="es",
-            model=ModelType.CLAUDE_3_SONNET,
+            model=ModelType.ANTHROPIC,
             algorithm="page",
             input_file=tmp_path / "test.txt",
             input_file_type=FileType.TXT,
