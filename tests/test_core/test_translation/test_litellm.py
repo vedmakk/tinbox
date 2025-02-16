@@ -35,7 +35,13 @@ def mock_completion():
                     type(
                         "Choice",
                         (),
-                        {"message": {"content": "Translated text"}},
+                        {
+                            "message": type(
+                                "Message",
+                                (),
+                                {"content": "Translated text"},
+                            )
+                        },
                     )
                 ],
                 "usage": type(
@@ -65,7 +71,13 @@ def mock_streaming_completion():
                     type(
                         "Choice",
                         (),
-                        {"message": {"content": "Translated text"}},
+                        {
+                            "delta": type(
+                                "Delta",
+                                (),
+                                {"content": "Translated text"},
+                            )
+                        },
                     )
                 ],
                 "usage": type(
@@ -94,7 +106,7 @@ async def test_text_translation(translator: LiteLLMTranslator, mock_completion):
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     response = await translator.translate(request)
@@ -120,7 +132,7 @@ async def test_image_translation(
         content=image_path.read_bytes(),
         content_type="image/png",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     response = await translator.translate(request)
@@ -141,7 +153,7 @@ async def test_streaming_translation(
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     async for chunk in await translator.translate(request, stream=True):
@@ -170,7 +182,7 @@ async def test_translation_error_handling(translator: LiteLLMTranslator, monkeyp
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     with pytest.raises(TranslationError, match="Translation failed: API error"):
@@ -187,10 +199,10 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         content="",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Empty content"):
+    with pytest.raises(TranslationError, match="Translation failed: Empty content"):
         await translator.translate(request)
 
     # Whitespace only
@@ -200,10 +212,10 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         content="   \n   ",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Empty content"):
+    with pytest.raises(TranslationError, match="Translation failed: Empty content"):
         await translator.translate(request)
 
 
@@ -217,7 +229,7 @@ async def test_long_content(translator: LiteLLMTranslator, mock_completion):
         content=long_text,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     response = await translator.translate(request)
@@ -234,7 +246,7 @@ async def test_special_characters(translator: LiteLLMTranslator, mock_completion
         content=special_text,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     response = await translator.translate(request)
@@ -250,8 +262,7 @@ async def test_invalid_model_params(translator: LiteLLMTranslator, mock_completi
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
-        model_params={"invalid_param": "value"},  # Invalid parameter
+        model_params={"model_name": "claude-3-sonnet", "invalid_param": "value"},
     )
 
     response = await translator.translate(request)
@@ -268,10 +279,12 @@ async def test_malformed_image(translator: LiteLLMTranslator, mock_completion):
         content=invalid_image_data,
         content_type="image/png",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Invalid image data"):
+    with pytest.raises(
+        TranslationError, match="Translation failed: Invalid image data"
+    ):
         await translator.translate(request)
 
 
@@ -293,7 +306,7 @@ async def test_timeout_handling(translator: LiteLLMTranslator, monkeypatch):
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     with pytest.raises(TranslationError, match="Translation failed: Request timed out"):
@@ -318,7 +331,7 @@ async def test_rate_limit_handling(translator: LiteLLMTranslator, monkeypatch):
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     with pytest.raises(
@@ -337,10 +350,12 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Invalid language code"):
+    with pytest.raises(
+        TranslationError, match="Translation failed: Invalid language code"
+    ):
         await translator.translate(request)
 
     # Invalid target language
@@ -350,10 +365,12 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Invalid language code"):
+    with pytest.raises(
+        TranslationError, match="Translation failed: Invalid language code"
+    ):
         await translator.translate(request)
 
 
@@ -368,7 +385,7 @@ async def test_mixed_content_handling(translator: LiteLLMTranslator, mock_comple
         content=mixed_content,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
     response = await translator.translate(request)
@@ -402,8 +419,8 @@ async def test_response_validation(translator: LiteLLMTranslator, monkeypatch):
         content="Hello, world!",
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
+        model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Invalid response format"):
+    with pytest.raises(TranslationError, match="No response from model"):
         await translator.translate(request)

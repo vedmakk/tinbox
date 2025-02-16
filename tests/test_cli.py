@@ -106,7 +106,7 @@ def test_translate_basic(
                 new_callable=AsyncMock,
                 return_value=mock_document_content,
             ),
-            patch("tinbox.cli.ModelInterface", return_value=mock_model_interface),
+            patch("tinbox.cli.create_translator", return_value=mock_model_interface),
             patch("tinbox.cli.console"),
         ):
             result = cli_runner.invoke(
@@ -117,7 +117,7 @@ def test_translate_basic(
                     "--to",
                     "es",
                     "--model",
-                    "claude-3-sonnet",
+                    "anthropic:claude-3-sonnet",
                 ],
             )
             assert result.exit_code == 0
@@ -214,7 +214,7 @@ def test_translate_with_output_file(
                 new_callable=AsyncMock,
                 return_value=mock_document_content,
             ),
-            patch("tinbox.cli.ModelInterface", return_value=mock_model_interface),
+            patch("tinbox.cli.create_translator", return_value=mock_model_interface),
             patch("tinbox.cli.console"),
         ):
             result = cli_runner.invoke(
@@ -276,7 +276,7 @@ def test_translate_verbose_mode(
                 new_callable=AsyncMock,
                 return_value=mock_document_content,
             ),
-            patch("tinbox.cli.ModelInterface", return_value=mock_model_interface),
+            patch("tinbox.cli.create_translator", return_value=mock_model_interface),
             patch("tinbox.cli.console"),
         ):
             result = cli_runner.invoke(
@@ -296,23 +296,19 @@ def test_translate_verbose_mode(
 
 
 def test_translate_force_mode(
-    cli_runner, mock_translation_result, mock_document_content, mock_model_interface
+    cli_runner,
+    mock_cost_estimate,
+    mock_translation_result,
+    mock_document_content,
+    mock_model_interface,
 ):
-    """Test translation with force mode."""
+    """Test translation in force mode."""
     test_file = Path("test.txt")
     test_file.write_text("Test content")
 
-    # Create cost estimate with warnings
-    estimate = CostEstimate(
-        estimated_tokens=100_000,
-        estimated_cost=3.0,
-        estimated_time=600.0,
-        warnings=["Large document detected (100,000 tokens)"],
-    )
-
     try:
         with (
-            patch("tinbox.cli.estimate_cost", return_value=estimate),
+            patch("tinbox.cli.estimate_cost", return_value=mock_cost_estimate),
             patch(
                 "tinbox.cli.translate_document",
                 new_callable=AsyncMock,
@@ -323,7 +319,7 @@ def test_translate_force_mode(
                 new_callable=AsyncMock,
                 return_value=mock_document_content,
             ),
-            patch("tinbox.cli.ModelInterface", return_value=mock_model_interface),
+            patch("tinbox.cli.create_translator", return_value=mock_model_interface),
             patch("tinbox.cli.console"),
         ):
             result = cli_runner.invoke(

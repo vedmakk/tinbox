@@ -70,7 +70,7 @@ def test_document_content_validation():
     assert content.metadata == {"test": "metadata"}
 
     # Invalid content type
-    with pytest.raises(ValueError, match="Invalid content type"):
+    with pytest.raises(ValidationError, match=r"String should match pattern"):
         DocumentContent(
             pages=["Test content"],
             content_type="invalid",

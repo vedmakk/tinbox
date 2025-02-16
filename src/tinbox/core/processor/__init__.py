@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Protocol, Union, List, Dict, Type
 from abc import ABC, abstractmethod
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from tinbox.core.types import FileType
 from tinbox.utils.logging import get_logger
@@ -20,6 +20,16 @@ class DocumentContent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(frozen=True)
+
+    @field_validator("pages")
+    @classmethod
+    def validate_pages_not_empty(
+        cls, v: List[Union[str, bytes]]
+    ) -> List[Union[str, bytes]]:
+        """Validate that pages list is not empty."""
+        if not v:
+            raise ValueError("Pages cannot be empty")
+        return v
 
 
 class DocumentMetadata(BaseModel):
