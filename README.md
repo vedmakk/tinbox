@@ -1,81 +1,151 @@
-# 🔄 Tinbox: A CLI Translation Tool
+# 🔄 Tinbox: Your Ultimate CLI Translation Tool
 
-**Tinbox** is a powerful command-line tool that harnesses the capabilities of Large Language Models (LLMs) to provide seamless document translation. Whether you're working with PDFs, Word documents, or plain text, Tinbox has you covered with both text-only and multimodal translation capabilities.
+**Tinbox** is a robust command-line tool designed to tackle the challenges of translating large documents, especially PDFs, using Large Language Models (LLMs). Unlike other tools, Tinbox excels in handling extensive document sizes and navigates around model limitations related to size and copyright issues, ensuring seamless and efficient translations.
+
+**Why Choose Tinbox?**
+- **Handles Large Documents**: Efficiently processes large PDFs and other document types.
+- **Overcomes Model Limitations**: Bypasses common model refusals due to size or copyright concerns.
+- **No OCR Needed**: Directly translates PDFs using advanced multimodal models.
+- **Smart Algorithms**: Achieve optimal translation results with our intelligent algorithms.
+- **Local and Cloud Support**: Use models locally or in the cloud, depending on your preference.
+
+**Quick Start Example:**
+```bash
+tinbox --to es document.pdf
+```
+
+## 🎯 The Problems Tinbox Solves
+
+1. **PDF Translation Challenges**
+   - Most tools require OCR, leading to formatting loss and errors
+   - Tinbox uses multimodal models to directly understand PDFs as images
+
+2. **Large Document Limitations**
+   - Traditional tools often fail with large documents
+   - Models frequently refuse or timeout on big files
+   - Tinbox smartly splits and processes documents while maintaining context
+
+3. **Model Refusal Issues**
+   - Many models refuse translation tasks due to:
+     - Copyright concerns
+     - Document size limitations
+     - Rate limiting
+   - Tinbox's algorithms work around these limitations intelligently
+
+4. **Quality and Consistency**
+   - Smart algorithms ensure consistent translations across document sections
+   - Maintains context between pages and segments
+   - Repairs potential inconsistencies at section boundaries
+
+![Tinbox Workflow](link_to_diagram.png)
 
 🔍 **Key Highlights:**
-- PDF translation using multimodal models (GPT-4V, Claude 3.5 Sonnet) - no OCR needed!
-- Smart translation algorithms for optimal results
-- Local model support via Ollama
-- Comprehensive benchmarking tools
+- Translate PDFs without OCR using advanced AI models
+- Handle documents of any size with smart splitting algorithms
+- Work around common model limitations and refusals
+- Track costs and performance with built-in benchmarking
 
 ## ✨ Features
 
-1. 📄 **Multiple Input Formats**  
-   - PDF (processed as images for multimodal models)
-   - Word (docx) and TXT (processed as text)
+### 📄 Smart Document Handling
+- **PDFs**: Processed directly as images - no OCR needed!
+- **Word (docx)**: Preserves formatting while translating
+- **Text files**: Efficient processing for large files
 
-2. 📝 **Multiple Output Formats**  
-   - Defaults to stdout or `.txt` file
-   - Future extensibility for PDF or Word output
+### 🧠 Intelligent Translation
+- **Smart Algorithms**:
+  - Page-by-Page with Seam Repair (default for PDF)
+  - Sliding Window for long text documents
+  - Automatic context preservation between sections
 
-3. 🧠 **Smart Translation Algorithms**  
-   - **Page-by-Page + Seam Repair** (default for PDF)
-   - **Sliding Window** (recommended for long TXT or user-specified)
+### 🤖 Flexible Model Support
+- Use powerful cloud models (GPT-4V, Claude 3.5 Sonnet)
+- Run translations locally with Ollama
+- Mix and match models for different tasks
 
-4. 🤖 **Model Flexibility**  
-   - Multimodal models (GPT-4o, Claude 3.5 Sonnet) for PDF processing
-   - Text-based models for Word/TXT processing
-   - Support for both local and cloud providers
-
-5. 🌐 **Language Support**
-   - Flexible source/target language specification using ISO 639-1 codes
-   - Common language aliases (e.g., 'en', 'zh', 'es')
+### 🌐 Language Support
+- Flexible source/target language specification using ISO 639-1 codes
+- Common language aliases (e.g., 'en', 'zh', 'es')
 
 6. 📊 **Benchmarking**  
    - Track overall translation time and token usage/cost
    - Compare algorithms or model providers side-by-side
 
-## 🚀 Installation & Dependencies
+## 🚀 Getting Started
 
-### Requirements
-1. **Python 3.9+** (recommended)
-2. **Model Dependencies**:
-   - `litellm` for unified model interface
-   - Local model support via Ollama
-   - Appropriate API keys for cloud models
-
-Installation:
+### Quick Install
 
 ```bash
+# Install base package
 pip install tinbox
 
-# Optional: Install additional modules for PDF/Word handling
-pip install tinbox[pdf,docx]
+# For PDF support (recommended)
+pip install tinbox[pdf]
+
+# For Word document support
+pip install tinbox[docx]
+
+# Install everything
+pip install tinbox[all]
 ```
 
----
+### Basic Usage
 
-## Command-Line Usage
+1. **Translate a PDF to Spanish**
+   ```bash
+   tinbox --to es document.pdf
+   ```
 
-Basic syntax:
+2. **Translate a Word document from Chinese to English**
+   ```bash
+   tinbox --from zh --to en document.docx
+   ```
 
-```bash
-tinbox [OPTIONS] <input-file>
-```
+3. **Handle a large text file with custom settings**
+   ```bash
+   tinbox --to fr --algorithm sliding-window large_document.txt
+   ```
 
-### 1. Global Options
+### 💡 Tips for Best Results
 
-| Option                          | Description                                                                                           |
-|--------------------------------|-------------------------------------------------------------------------------------------------------|
-| `--from, -f <LANG>`           | Source language code (e.g., 'en', 'zh', 'es', 'de'). Defaults to auto-detect.                        |
-| `--to, -t <LANG>`             | Target language code. Defaults to 'en' (English).                                                      |
-| `--algorithm, -a <ALGO>`       | Translation algorithm. One of `page`, `sliding-window`. Defaults to `page`.                          |
-| `--model <MODEL_NAME>`         | Model/provider (e.g., `gpt-4o`, `claude-3-5-sonnet`, `olama:mistral-small`).                                      |
-| `--output, -o <OUTPUT_FILE>`   | Output file path. If not provided, writes to stdout.                                                 |
-| `--format, -F <FORMAT>`        | Output format (text, json, or markdown). Defaults to text.                                           |
-| `--benchmark, -b`              | Enable benchmarking mode.                                                                            |
+1. **For Large Documents**
+   - Use the sliding window algorithm: `--algorithm sliding-window`
+   - Adjust window size if needed: `--window-size 3000`
 
-### 2. Supported Language Codes
+2. **For PDFs**
+   - The default page-by-page algorithm works best
+   - No OCR needed - just point to your PDF!
+
+3. **For Best Performance**
+   - Use local models via Ollama for faster processing
+   - Cloud models (GPT-4V, Claude) for highest quality
+
+## 📖 Detailed Documentation
+
+### Command-Line Options
+
+#### Core Options
+| Option              | Description                                           | Example                    |
+|--------------------|-------------------------------------------------------|----------------------------|
+| `--from, -f`       | Source language (auto-detect if not specified)        | `--from zh`               |
+| `--to, -t`         | Target language (default: English)                    | `--to es`                 |
+| `--model`          | Model to use for translation                          | `--model gpt-4v`          |
+| `--output, -o`     | Output file (default: print to console)              | `--output translated.txt`  |
+
+#### Algorithm Options
+| Option              | Description                                           | Default                    |
+|--------------------|-------------------------------------------------------|----------------------------|
+| `--algorithm, -a`  | Translation algorithm (`page` or `sliding-window`)    | `page` for PDF            |
+| `--window-size`    | Size of translation window                            | 2000 tokens               |
+| `--overlap-size`   | Overlap between windows                               | 200 tokens                |
+
+#### Output Format Options
+| Option              | Description                                           | Example Output             |
+|--------------------|-------------------------------------------------------|----------------------------|
+| `--format, -F`     | Output format (text, json, markdown)                  | See examples below         |
+| `--benchmark, -b`  | Include performance metrics                           | Translation time, costs    |
+
+### Supported Languages
 
 Common language codes (ISO 639-1):
 
@@ -92,206 +162,90 @@ Common language codes (ISO 639-1):
 | ar   | Arabic      | ara          |
 | hi   | Hindi       | hin          |
 
-### 3. Algorithm-Specific Options
+### Output Format Examples
 
-#### A. Page-by-Page + Seam Repair
-(Default for all file types)
-
-| Option                          | Description                                                                                    |
-|--------------------------------|------------------------------------------------------------------------------------------------|
-| `--page-seam-overlap N`        | Token overlap for seam repair. Default `200` tokens or `25%`.                                 |
-| `--max-page-context <TOKENS>`  | Max tokens per chunk. Default `2000`.                                                         |
-| `--repair-model <MODEL_NAME>`  | Model for seam repair (can differ from main model).                                           |
-
-#### B. Sliding Window Options
-
-| Option                          | Description                                                                                    |
-|--------------------------------|------------------------------------------------------------------------------------------------|
-| `--window-size <TOKENS>`       | Size of each translation window. Default `2000`.                                              |
-| `--overlap-size <TOKENS>`      | Overlap between windows. Default `200`.                                                       |
-| `--split-level <LEVEL>`        | Split text by 'paragraph' or 'sentence'. Default 'paragraph'.                                 |
-
-### 4. Output Formats
-
-Tinbox supports multiple output formats to suit different needs:
-
-#### A. Plain Text (Default)
-Just the translated text, suitable for direct use:
+#### 1. Plain Text (Default)
 ```bash
 tinbox translate document.pdf --to es
-# Output: The translated text...
+# Output: Translated text...
 ```
 
-#### B. JSON
-Structured output with metadata, statistics, and results:
+#### 2. JSON Output
 ```bash
 tinbox translate document.pdf --to es --format json
 ```
 
-Example JSON output:
+Example response:
 ```json
 {
   "metadata": {
     "source_lang": "en",
     "target_lang": "es",
     "model": "claude-3-sonnet",
-    "algorithm": "page",
-    "input_file": "document.pdf",
-    "input_file_type": "pdf",
-    "timestamp": "2024-03-21T14:30:00"
+    "algorithm": "page"
   },
   "result": {
-    "text": "El texto traducido...",
+    "text": "Translated text...",
     "tokens_used": 1500,
     "cost": 0.045,
     "time_taken": 12.5
-  },
-  "warnings": [
-    "Large document detected"
-  ],
-  "errors": []
+  }
 }
 ```
 
-#### C. Markdown
-Human-readable report with all details:
+#### 3. Markdown Report
 ```bash
 tinbox translate document.pdf --to es --format markdown
 ```
 
-Example Markdown output:
-```markdown
-# Translation Results
+### Advanced Usage
 
-## Metadata
-- Source Language: en
-- Target Language: es
-- Model: claude-3-sonnet
-- Algorithm: page
-- Input File: document.pdf
-- File Type: pdf
-- Timestamp: 2024-03-21T14:30:00
-
-## Translation
-```text
-El texto traducido...
-```
-
-## Statistics
-- Tokens Used: 1,500
-- Cost: $0.0450
-- Time Taken: 12.5s
-
-## Warnings
-- Large document detected
-
-## Errors
-[None]
-```
-
-The output format can be specified with the `--format` option:
-- `--format text` (default): Just the translated text
-- `--format json`: Structured JSON output
-- `--format markdown`: Human-readable report
-
-Use with `--output` to save to a file:
-```bash
-# Save as JSON
-tinbox translate document.pdf --to es --format json --output translation.json
-
-# Save as Markdown report
-tinbox translate document.pdf --to es --format markdown --output report.md
-```
-
-**Process Flow**:
-1. **Document Processing**:
-   - PDF: Convert pages to images
-   - Word/TXT: Extract text page-by-page
-2. **Translation**:
-   - PDF: Send page images to multimodal model
-   - Text: Send text chunks to text model
-3. **Seam Repair**: Overlap processing for continuity
-4. **Assembly**: Concatenate results
-
----
-
-## Example Commands
-
-1. **Basic Translation (English to Spanish)**  
+1. **Handling Very Large Documents**
    ```bash
-   tinbox --to es document.pdf
-   ```
-   - Uses default model (e.g., `gpt-4o` for PDF)
-   - Auto-detects source language
-   - Outputs to stdout
-
-2. **Specify Source and Target Languages**  
-   ```bash
-   tinbox --from zh --to en --model claude-3.5-latest document.docx
+   tinbox --to es --algorithm sliding-window \
+          --window-size 3000 --overlap-size 300 \
+          large_document.pdf
    ```
 
-3. **Use Sliding Window with Custom Parameters**  
+2. **Using Local Models**
    ```bash
-   tinbox --from ja --to ko --algorithm sliding-window --window-size 3000 large_text.txt
+   tinbox --to fr --model ollama:mistral-small document.txt
    ```
 
-## Project Structure
+3. **Benchmarking Different Models**
+   ```bash
+   tinbox --to de --benchmark --model gpt-4v document.pdf
+   ```
+
+## 🛠 Project Structure
 
 ```
 tinbox/
-├── src
-│   └── tinbox
-│       ├── cli.py
-│       ├── core
-│       │   ├── cost.py
-│       │   ├── __init__.py
-│       │   ├── output.py
-│       │   ├── processor
-│       │   │   ├── docx.py
-│       │   │   ├── __init__.py
-│       │   │   ├── pdf.py
-│       │   │   └── text.py
-│       │   ├── progress.py
-│       │   ├── translation
-│       │   │   ├── algorithms.py
-│       │   │   ├── checkpoint.py
-│       │   │   ├── __init__.py
-│       │   │   ├── interface.py
-│       │   │   ├── litellm.py
-│       │   │   └── types.py
-│       ├── __init__.py
-│       └── utils
-│           ├── language.py
-│           ├── logging.py
-└── tests
-    ├── data
-    ├── test_cli.py
-    ├── test_core
-    │   ├── test_cost.py
-    │   ├── test_output.py
-    │   ├── test_processor.py
-    │   ├── test_processors
-    │   │   ├── test_pdf_processor.py
-    │   │   ├── test_text_processor.py
-    │   │   └── test_word_processor.py
-    │   ├── test_progress.py
-    │   └── test_translation
-    │       ├── test_algorithms.py
-    │       └── test_litellm.py
-    └── test_utils
-        └── test_language.py
+├── src/
+│   └── tinbox/
+│       ├── cli.py                 # Command-line interface
+│       ├── core/                  # Core functionality
+│       │   ├── cost.py           # Cost tracking
+│       │   ├── processor/        # Document processors
+│       │   └── translation/      # Translation algorithms
+│       └── utils/                # Utilities
+└── tests/                        # Test suite
 ```
 
-## Future Extensions
+## 🔜 Future Plans
 
-1. **Additional Formats**  
-   - Output to PDF, Word, or HTML
-   - Possibly maintain original layout (requires advanced tooling)
-2. **Better Section/Paragraph Detection**  
-   - Use AI-based or custom logic to segment large documents into semantically coherent blocks
-3. **Shared Terminology / Glossary**  
-   - Option to pass a domain glossary or term dictionary for consistency
-4. **Human-In-The-Loop**  
-   - Provide interactive mode for users to correct partial translations before final output
-5. **Model Fine-Tuning**  
-   - Connect to specialized or fine-tuned local models for domain-specific documents
+1. **Enhanced Output Formats**
+   - PDF output with original formatting
+   - Word document export
+   - HTML with parallel text
+
+2. **Advanced Features**
+   - AI-powered section detection
+   - Custom terminology support
+   - Interactive translation review
+   - Domain-specific model fine-tuning
+
+3. **Performance Improvements**
+   - Parallel processing
+   - Better caching
+   - Reduced API costs
