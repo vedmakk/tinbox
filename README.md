@@ -100,6 +100,106 @@ Common language codes (ISO 639-1):
 | `--max-page-context <TOKENS>`  | Max tokens per chunk. Default `2000`.                                                         |
 | `--repair-model <MODEL_NAME>`  | Model for seam repair (can differ from main model).                                           |
 
+#### B. Sliding Window Options
+
+| Option                          | Description                                                                                    |
+|--------------------------------|------------------------------------------------------------------------------------------------|
+| `--window-size <TOKENS>`       | Size of each translation window. Default `2000`.                                              |
+| `--overlap-size <TOKENS>`      | Overlap between windows. Default `200`.                                                       |
+| `--split-level <LEVEL>`        | Split text by 'paragraph' or 'sentence'. Default 'paragraph'.                                 |
+
+### 4. Output Formats
+
+Tinbox supports multiple output formats to suit different needs:
+
+#### A. Plain Text (Default)
+Just the translated text, suitable for direct use:
+```bash
+tinbox translate document.pdf --to es
+# Output: The translated text...
+```
+
+#### B. JSON
+Structured output with metadata, statistics, and results:
+```bash
+tinbox translate document.pdf --to es --format json
+```
+
+Example JSON output:
+```json
+{
+  "metadata": {
+    "source_lang": "en",
+    "target_lang": "es",
+    "model": "claude-3-sonnet",
+    "algorithm": "page",
+    "input_file": "document.pdf",
+    "input_file_type": "pdf",
+    "timestamp": "2024-03-21T14:30:00"
+  },
+  "result": {
+    "text": "El texto traducido...",
+    "tokens_used": 1500,
+    "cost": 0.045,
+    "time_taken": 12.5
+  },
+  "warnings": [
+    "Large document detected"
+  ],
+  "errors": []
+}
+```
+
+#### C. Markdown
+Human-readable report with all details:
+```bash
+tinbox translate document.pdf --to es --format markdown
+```
+
+Example Markdown output:
+```markdown
+# Translation Results
+
+## Metadata
+- Source Language: en
+- Target Language: es
+- Model: claude-3-sonnet
+- Algorithm: page
+- Input File: document.pdf
+- File Type: pdf
+- Timestamp: 2024-03-21T14:30:00
+
+## Translation
+```text
+El texto traducido...
+```
+
+## Statistics
+- Tokens Used: 1,500
+- Cost: $0.0450
+- Time Taken: 12.5s
+
+## Warnings
+- Large document detected
+
+## Errors
+[None]
+```
+
+The output format can be specified with the `--format` option:
+- `--format text` (default): Just the translated text
+- `--format json`: Structured JSON output
+- `--format markdown`: Human-readable report
+
+Use with `--output` to save to a file:
+```bash
+# Save as JSON
+tinbox translate document.pdf --to es --format json --output translation.json
+
+# Save as Markdown report
+tinbox translate document.pdf --to es --format markdown --output report.md
+```
+
 **Process Flow**:
 1. **Document Processing**:
    - PDF: Convert pages to images
@@ -109,14 +209,6 @@ Common language codes (ISO 639-1):
    - Text: Send text chunks to text model
 3. **Seam Repair**: Overlap processing for continuity
 4. **Assembly**: Concatenate results
-
-#### B. Sliding Window Options
-
-| Option                          | Description                                                                                    |
-|--------------------------------|------------------------------------------------------------------------------------------------|
-| `--window-size <TOKENS>`       | Size of each translation window. Default `2000`.                                              |
-| `--overlap-size <TOKENS>`      | Overlap between windows. Default `200`.                                                       |
-| `--split-level <LEVEL>`        | Split text by 'paragraph' or 'sentence'. Default 'paragraph'.                                 |
 
 ---
 

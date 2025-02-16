@@ -118,7 +118,7 @@ async def test_text_translation(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
 
     response = await translator.translate(request)
@@ -143,7 +143,7 @@ async def test_image_translation(
         target_lang="es",
         content=image_path.read_bytes(),
         content_type="image/png",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
 
     response = await translator.translate(request)
@@ -161,7 +161,7 @@ async def test_streaming_translation(translator: LiteLLMTranslator, mock_complet
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
 
     response_gen = await translator.translate(request, stream=True)
@@ -194,7 +194,7 @@ async def test_translation_error_handling(translator: LiteLLMTranslator, monkeyp
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
 
     with pytest.raises(TranslationError, match="Translation failed"):
@@ -232,7 +232,7 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content="",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -243,7 +243,7 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content="   \n\t   ",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -258,7 +258,7 @@ async def test_long_content(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content=long_text,
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -274,7 +274,7 @@ async def test_special_characters(translator: LiteLLMTranslator, mock_completion
         target_lang="es",
         content=special_text,
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -288,7 +288,7 @@ async def test_invalid_model_params(translator: LiteLLMTranslator, mock_completi
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
         model_params={"invalid_param": "value"},  # Invalid parameter
     )
     response = await translator.translate(request)
@@ -304,7 +304,7 @@ async def test_malformed_image(translator: LiteLLMTranslator, mock_completion):
         target_lang="es",
         content=invalid_image_data,
         content_type="image/png",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -327,7 +327,7 @@ async def test_timeout_handling(translator: LiteLLMTranslator, monkeypatch):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
 
     with pytest.raises(TranslationError, match="Translation failed"):
@@ -351,7 +351,7 @@ async def test_rate_limit_handling(translator: LiteLLMTranslator, monkeypatch):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
 
     with pytest.raises(TranslationError, match="Translation failed"):
@@ -367,7 +367,7 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -378,7 +378,7 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         target_lang="invalid",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -394,7 +394,7 @@ async def test_mixed_content_handling(translator: LiteLLMTranslator, mock_comple
         target_lang="es",
         content=mixed_content,
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
     response = await translator.translate(request)
     assert response.text == "Translated text"  # Mock response
@@ -426,7 +426,7 @@ async def test_response_validation(translator: LiteLLMTranslator, monkeypatch):
         target_lang="es",
         content="Hello, world!",
         content_type="text/plain",
-        model=ModelType.GPT4_VISION,
+        model=ModelType.GPT4O,
     )
 
     with pytest.raises(TranslationError, match="No response from model"):

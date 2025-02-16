@@ -65,7 +65,9 @@ def test_normalize_language_code_invalid(invalid_code: str):
         ("русский", "english", ("ru", "en")),
     ],
 )
-def test_validate_language_pair_valid(source: str, target: str, expected: tuple[str, str]):
+def test_validate_language_pair_valid(
+    source: str, target: str, expected: tuple[str, str]
+):
     """Test validating valid language pairs."""
     assert validate_language_pair(source, target) == expected
 
@@ -84,4 +86,4 @@ def test_validate_language_pair_valid(source: str, target: str, expected: tuple[
 def test_validate_language_pair_invalid(source: str, target: str):
     """Test validating invalid language pairs."""
     with pytest.raises(LanguageError):
-        validate_language_pair(source, target) 
+        validate_language_pair(source, target)

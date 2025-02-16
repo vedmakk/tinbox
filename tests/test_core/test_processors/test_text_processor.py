@@ -37,7 +37,7 @@ def invalid_encoding_text(tmp_path: Path) -> Path:
     """Fixture providing a text file with invalid UTF-8 encoding."""
     file_path = tmp_path / "invalid.txt"
     with file_path.open("wb") as f:
-        f.write(b"This has invalid UTF-8 \xFF\xFE bytes")
+        f.write(b"This has invalid UTF-8 \xff\xfe bytes")
     return file_path
 
 
@@ -45,16 +45,16 @@ def invalid_encoding_text(tmp_path: Path) -> Path:
 async def test_text_processor_metadata(processor: TextProcessor, sample_text: Path):
     """Test text document metadata extraction."""
     metadata = await processor.get_metadata(sample_text)
-    
+
     assert isinstance(metadata, DocumentMetadata)
     assert metadata.file_type == FileType.TXT
     assert metadata.total_pages == 1  # Single text file
     assert metadata.title == "test.txt"
-    
+
     # File timestamps should be present
     assert metadata.creation_date is not None
     assert metadata.modification_date is not None
-    
+
     # Custom metadata
     assert metadata.custom_metadata["size_bytes"] > 0
     assert metadata.custom_metadata["encoding"] == "utf-8"
@@ -68,15 +68,15 @@ async def test_text_processor_content_extraction(
     """Test text document content extraction."""
     content_stream = processor.extract_content(sample_text)
     content = await content_stream.__anext__()
-    
+
     assert isinstance(content, DocumentContent)
     assert content.content_type == "text/plain"
     assert content.page_number == 1  # Single text file
-    
+
     # Verify content
     assert "This is a test document" in content.content
     assert "هذا نص عربي" in content.content  # Arabic text should be present
-    
+
     # Verify metadata
     assert content.metadata["length"] > 0
     assert content.metadata["encoding"] == "utf-8"
@@ -88,7 +88,7 @@ async def test_text_processor_rtl_content(processor: TextProcessor, sample_text:
     """Test handling of right-to-left text."""
     content_stream = processor.extract_content(sample_text)
     content = await content_stream.__anext__()
-    
+
     assert "هذا نص عربي" in content.content
     assert content.metadata["contains_rtl"]
 
@@ -100,7 +100,7 @@ async def test_text_processor_invalid_encoding(
     """Test handling of invalid UTF-8 encoding."""
     with pytest.raises(ProcessingError, match="not valid UTF-8"):
         await processor.get_metadata(invalid_encoding_text)
-    
+
     with pytest.raises(ProcessingError, match="not valid UTF-8"):
         async for _ in processor.extract_content(invalid_encoding_text):
             pass
@@ -112,9 +112,9 @@ async def test_text_processor_invalid_file(processor: TextProcessor, tmp_path: P
     # Non-existent file
     with pytest.raises(ProcessingError, match="does not exist"):
         await processor.get_metadata(tmp_path / "nonexistent.txt")
-    
+
     # Invalid file type
     invalid_file = tmp_path / "test.docx"
     invalid_file.write_text("Not a text file")
     with pytest.raises(ProcessingError, match="not supported"):
-        await processor.get_metadata(invalid_file) 
+        await processor.get_metadata(invalid_file)

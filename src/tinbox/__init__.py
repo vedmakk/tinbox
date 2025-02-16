@@ -6,4 +6,4 @@ supporting multiple input formats and translation algorithms.
 
 __version__ = "0.1.0"
 __author__ = "strickvl"
-__license__ = "MIT" 
+__license__ = "MIT"

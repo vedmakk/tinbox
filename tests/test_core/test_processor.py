@@ -17,12 +17,12 @@ from tinbox.core.processor import (
 
 class MockProcessor(BaseDocumentProcessor):
     """Mock document processor for testing."""
-    
+
     @property
     def supported_types(self) -> set[FileType]:
         """Get supported file types."""
         return {FileType.TXT, FileType.PDF}
-    
+
     async def get_metadata(self, file_path: Path) -> DocumentMetadata:
         """Mock metadata extraction."""
         return DocumentMetadata(
@@ -30,7 +30,7 @@ class MockProcessor(BaseDocumentProcessor):
             total_pages=1,
             title="Test Document",
         )
-    
+
     async def extract_content(
         self, file_path: Path, *, start_page: int = 1, end_page: int | None = None
     ) -> AsyncIterator[DocumentContent]:
@@ -59,7 +59,7 @@ def test_document_content_validation():
     assert content.content == "Test content"
     assert content.content_type == "text/plain"
     assert content.page_number == 1
-    
+
     # Invalid content type
     with pytest.raises(ValidationError):
         DocumentContent(
@@ -67,7 +67,7 @@ def test_document_content_validation():
             content_type="invalid",  # Doesn't match regex
             page_number=1,
         )
-    
+
     # Invalid page number
     with pytest.raises(ValidationError):
         DocumentContent(
@@ -88,7 +88,7 @@ def test_document_metadata_validation():
     assert metadata.file_type == FileType.TXT
     assert metadata.total_pages == 1
     assert metadata.title == "Test Document"
-    
+
     # Invalid total pages
     with pytest.raises(ValidationError):
         DocumentMetadata(
@@ -110,18 +110,18 @@ async def test_processor_validate_file(processor: MockProcessor, tmp_path: Path)
     # Create a test file
     test_file = tmp_path / "test.txt"
     test_file.write_text("Test content")
-    
+
     # Valid file
     await processor.validate_file(test_file)
-    
+
     # Non-existent file
     with pytest.raises(ProcessingError, match="File does not exist"):
         await processor.validate_file(tmp_path / "nonexistent.txt")
-    
+
     # Directory instead of file
     with pytest.raises(ProcessingError, match="Not a file"):
         await processor.validate_file(tmp_path)
-    
+
     # Unsupported file type
     unsupported = tmp_path / "test.docx"
     unsupported.write_text("Test content")
@@ -134,7 +134,7 @@ async def test_processor_get_metadata(processor: MockProcessor, tmp_path: Path):
     """Test metadata extraction."""
     test_file = tmp_path / "test.txt"
     test_file.write_text("Test content")
-    
+
     metadata = await processor.get_metadata(test_file)
     assert isinstance(metadata, DocumentMetadata)
     assert metadata.file_type == FileType.TXT
@@ -146,11 +146,11 @@ async def test_processor_extract_content(processor: MockProcessor, tmp_path: Pat
     """Test content extraction."""
     test_file = tmp_path / "test.txt"
     test_file.write_text("Test content")
-    
+
     content_stream = processor.extract_content(test_file)
     content = await content_stream.__anext__()
-    
+
     assert isinstance(content, DocumentContent)
     assert content.content == "Test content"
     assert content.content_type == "text/plain"
-    assert content.page_number == 1 
+    assert content.page_number == 1

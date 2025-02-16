@@ -2,7 +2,7 @@
 
 from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -18,29 +18,79 @@ class FileType(str, Enum):
 class ModelType(str, Enum):
     """Supported LLM models for translation."""
 
-    GPT4_VISION = "gpt-4o"  # OpenAI GPT-4 with vision capabilities
-    CLAUDE_3_5_SONNET = "claude-3.5-sonnet-latest"  # Anthropic Claude 3 Sonnet
-    CLAUDE_3_5_OPUS = "claude-3.5-opus-latest"  # Anthropic Claude 3 Opus
+    GPT4O = "gpt-4o"  # OpenAI GPT-4 with vision capabilities
+    CLAUDE_3_SONNET = "claude-3-sonnet"  # Anthropic Claude 3 Sonnet
     OLLAMA = "ollama"  # For local models
 
 
 class TranslationConfig(BaseModel):
     """Configuration for translation tasks."""
 
+    # Basic settings
     source_lang: str
     target_lang: str
     model: ModelType
     algorithm: Literal["page", "sliding-window"]
     input_file: Path
     output_file: Optional[Path] = None
-    benchmark: bool = False
+
+    # UI and progress settings
+    verbose: bool = Field(
+        default=False,
+        description="Whether to show detailed progress information",
+    )
+    progress_callback: Optional[Callable[[int], None]] = Field(
+        default=None,
+        description="Callback function to update progress (receives tokens processed)",
+    )
+
+    # Cost control settings
+    max_cost: Optional[float] = Field(
+        default=None,
+        description="Maximum cost threshold in USD",
+        ge=0.0,
+    )
+    force: bool = Field(
+        default=False,
+        description="Whether to skip cost and size warnings",
+    )
 
     # Algorithm-specific settings
-    page_seam_overlap: int = Field(default=200, gt=0)
-    window_size: int = Field(default=2000, gt=0)
-    overlap_size: int = Field(default=200, gt=0)
+    page_seam_overlap: int = Field(
+        default=200,
+        gt=0,
+        description="Token overlap for page-by-page translation",
+    )
+    window_size: int = Field(
+        default=2000,
+        gt=0,
+        description="Window size for sliding window translation",
+    )
+    overlap_size: int = Field(
+        default=200,
+        gt=0,
+        description="Overlap size for sliding window translation",
+    )
 
-    model_config = ConfigDict(frozen=True)  # Make config immutable
+    # Checkpoint settings
+    checkpoint_dir: Optional[Path] = Field(
+        default=None,
+        description="Directory to store checkpoints",
+    )
+    checkpoint_frequency: int = Field(
+        default=1,
+        gt=0,
+        description="Save checkpoint every N pages/chunks",
+    )
+    resume_from_checkpoint: bool = Field(
+        default=True,
+        description="Whether to try resuming from checkpoint",
+    )
+
+    model_config = ConfigDict(
+        frozen=True,  # Make config immutable
+        arbitrary_types_allowed=True,  # Allow Callable type for progress_callback
+    )
 
 
 class TranslationResult(BaseModel):

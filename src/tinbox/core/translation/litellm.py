@@ -182,7 +182,7 @@ class LiteLLMTranslator(ModelInterface):
         try:
             # Make a minimal test request
             response = completion(
-                model=ModelType.GPT4_VISION.value,  # Use GPT-4o for validation
+                model=ModelType.GPT4O.value,  # Use GPT-4o for validation
                 messages=[{"role": "user", "content": "test"}],
                 max_tokens=1,
             )

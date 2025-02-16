@@ -12,4 +12,4 @@ from tinbox.core.processors.pdf import PDFProcessor
 
 # Placeholders will raise NotImplementedError
 from tinbox.core.processors.word import WordProcessor
-from tinbox.core.processors.text import TextProcessor 
+from tinbox.core.processors.text import TextProcessor
