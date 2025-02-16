@@ -1,4 +1,4 @@
-# 🔄 Tinbox: Your Ultimate CLI Translation Tool
+# 🔄 Tinbox: Your Ultimate Translation Tool
 
 **Tinbox** is a robust command-line tool designed to tackle the challenges of translating large documents, especially PDFs, using Large Language Models (LLMs). Unlike other tools, Tinbox excels in handling extensive document sizes and navigates around model limitations related to size and copyright issues, ensuring seamless and efficient translations.
 
