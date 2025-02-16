@@ -20,6 +20,30 @@ from tinbox.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def detect_rtl(text: str) -> bool:
+    """Detect if text contains RTL characters.
+
+    Args:
+        text: Text to check for RTL characters
+
+    Returns:
+        True if RTL characters are found, False otherwise
+    """
+    # RTL Unicode ranges
+    rtl_ranges = [
+        (0x0590, 0x05FF),  # Hebrew
+        (0x0600, 0x06FF),  # Arabic
+        (0x0750, 0x077F),  # Arabic Supplement
+        (0x08A0, 0x08FF),  # Arabic Extended-A
+        (0xFB50, 0xFDFF),  # Arabic Presentation Forms-A
+        (0xFE70, 0xFEFF),  # Arabic Presentation Forms-B
+    ]
+
+    return any(
+        any(start <= ord(char) <= end for start, end in rtl_ranges) for char in text
+    )
+
+
 def _extract_text(doc: Document) -> str:
     """Extract all text from a Word document.
 
@@ -32,22 +56,32 @@ def _extract_text(doc: Document) -> str:
     paragraphs = []
     for paragraph in doc.paragraphs:
         if paragraph.text.strip():
-            paragraphs.append(paragraph.text)
+            paragraphs.append(paragraph.text.strip())
     return "\n".join(paragraphs)
 
 
 class WordProcessor(BaseDocumentProcessor):
     """Processor for Word documents."""
 
-    def __init__(self) -> None:
-        """Initialize the Word processor."""
-        super().__init__()
-        self._rtl_pattern = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+")
-
     @property
     def supported_types(self) -> set[FileType]:
         """Get the file types supported by this processor."""
         return {FileType.DOCX}
+
+    async def validate_file(self, file_path: Path) -> None:
+        """Validate that the file exists and is a valid Word document.
+
+        Args:
+            file_path: Path to the Word document
+
+        Raises:
+            ProcessingError: If the file is invalid
+        """
+        if not file_path.exists():
+            raise ProcessingError("File not found")
+
+        if file_path.suffix.lower() != ".docx":
+            raise ProcessingError("File format not supported")
 
     async def get_metadata(self, file_path: Path) -> DocumentMetadata:
         """Extract metadata from the Word document.
@@ -69,12 +103,11 @@ class WordProcessor(BaseDocumentProcessor):
 
             # Extract text and check for RTL content
             text = _extract_text(doc)
-            has_rtl = bool(self._rtl_pattern.search(text))
 
             return DocumentMetadata(
                 file_type=FileType.DOCX,
                 total_pages=1,  # Treat as single text file
-                title=core_props.title,
+                title=file_path.name,  # Always use filename as title
                 author=core_props.author,
                 creation_date=str(core_props.created) if core_props.created else None,
                 modification_date=str(core_props.modified)
@@ -86,7 +119,7 @@ class WordProcessor(BaseDocumentProcessor):
                     "keywords": core_props.keywords,
                     "language": core_props.language,
                     "subject": core_props.subject,
-                    "contains_rtl": has_rtl,
+                    "contains_rtl": detect_rtl(text),
                 },
             )
 
@@ -111,27 +144,27 @@ class WordProcessor(BaseDocumentProcessor):
 
         Args:
             file_path: Path to the Word document
-            start_page: Ignored (kept for interface compatibility)
-            end_page: Ignored (kept for interface compatibility)
+            start_page: Must be 1 for Word files
+            end_page: Must be 1 or None for Word files
 
         Yields:
-            Text content of paragraphs
+            Text content as a single string
 
         Raises:
             ProcessingError: If content extraction fails
         """
         await self.validate_file(file_path)
 
+        if start_page != 1 or (end_page is not None and end_page != 1):
+            raise ProcessingError("Word files only support page 1")
+
         try:
             # Load document and extract text
             doc = Document(file_path)
+            text = _extract_text(doc)
+            yield text
 
-            # Extract paragraphs
-            for paragraph in doc.paragraphs:
-                if paragraph.text.strip():  # Only yield non-empty paragraphs
-                    yield paragraph.text.strip()
-
-        except PackageNotFoundError as e:
+        except (PackageNotFoundError, BadZipFile) as e:
             raise ProcessingError(
                 f"Invalid or corrupted Word document: {str(e)}"
             ) from e
