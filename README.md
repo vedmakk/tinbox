@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Tinbox** is a command-line tool designed to translate documents using various **Large Language Models (LLMs)**, including both text-only and multimodal models. For PDFs, it leverages multimodal models (like GPT-4V or Claude 3 Sonnet) to directly process page images without OCR. For text-based formats (Word, TXT), it uses text-to-text translation. The tool supports multiple input/output formats and includes two primary translation algorithms—**Page-by-Page with Seam Repair** and **Sliding Window**—with benchmarking capabilities for time and token usage/cost.
+**Tinbox** is a command-line tool designed to translate documents using various **Large Language Models (LLMs)**, including both text-only and multimodal models. For PDFs, it leverages multimodal models (like GPT-4o or Claude 3.5 Sonnet) to directly process page images without OCR. For text-based formats (Word, TXT), it uses text-to-text translation. The tool supports multiple input/output formats and includes two primary translation algorithms—**Page-by-Page with Seam Repair** and **Sliding Window**—with benchmarking capabilities for time and token usage/cost.
 
 ---
 
@@ -15,10 +15,10 @@
    - Defaults to stdout or `.txt` file
    - Future extensibility for PDF or Word output
 3. **Two Translation Algorithms**  
-   - **Page-by-Page + Seam Repair** (default for PDF/Word)
+   - **Page-by-Page + Seam Repair** (default for PDF)
    - **Sliding Window** (recommended for long TXT or user-specified)
 4. **Model Flexibility**  
-   - Multimodal models (GPT-4V, Claude 3 Sonnet) for PDF processing
+   - Multimodal models (GPT-4o, Claude 3.5 Sonnet) for PDF processing
    - Text-based models for Word/TXT processing
    - Support for both local and cloud providers
 5. **Language Support**
@@ -48,7 +48,7 @@ Installation:
 pip install tinbox
 
 # Optional: Install additional modules for PDF/Word handling
-pip install pdf2image python-docx
+pip install tinbox[pdf,docx]
 ```
 
 ---
@@ -66,9 +66,9 @@ tinbox [OPTIONS] <input-file>
 | Option                          | Description                                                                                           |
 |--------------------------------|-------------------------------------------------------------------------------------------------------|
 | `--from, -f <LANG>`           | Source language code (e.g., 'en', 'zh', 'es', 'de'). Defaults to auto-detect.                        |
-| `--to, -t <LANG>`             | Target language code. Required.                                                                        |
+| `--to, -t <LANG>`             | Target language code. Defaults to 'en' (English).                                                      |
 | `--algorithm, -a <ALGO>`       | Translation algorithm. One of `page`, `sliding-window`. Defaults to `page`.                          |
-| `--model <MODEL_NAME>`         | Model/provider (e.g., `gpt4v`, `claude3`, `olama:local-model`).                                      |
+| `--model <MODEL_NAME>`         | Model/provider (e.g., `gpt-4o`, `claude-3-5-sonnet`, `olama:mistral-small`).                                      |
 | `--output, -o <OUTPUT_FILE>`   | Output file path. If not provided, writes to stdout.                                                 |
 | `--benchmark, -b`              | Enable benchmarking mode.                                                                            |
 
@@ -126,13 +126,13 @@ Common language codes (ISO 639-1):
    ```bash
    tinbox --to es document.pdf
    ```
-   - Uses default model (e.g., `gpt4v` for PDF)
+   - Uses default model (e.g., `gpt-4o` for PDF)
    - Auto-detects source language
    - Outputs to stdout
 
 2. **Specify Source and Target Languages**  
    ```bash
-   tinbox --from zh --to en --model claude3 document.docx
+   tinbox --from zh --to en --model claude-3.5-latest document.docx
    ```
 
 3. **Use Sliding Window with Custom Parameters**  
@@ -142,319 +142,266 @@ Common language codes (ISO 639-1):
 
 4. **Run Benchmarks with Different Models**  
    ```bash
-   tinbox --from de --to fr --benchmark --model gpt4v sample.pdf
-   tinbox --from de --to fr --benchmark --model claude3 sample.pdf
+   tinbox --from de --to fr --benchmark --model gpt-4o sample.pdf
+   tinbox --from de --to fr --benchmark --model claude-3.5-latest sample.pdf
    ```
 
 ## Implementation Details
 
-### 1. Core Classes and Types
+### 1. Core Types and Models
 
 ```python
-from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Union, Literal
 from pathlib import Path
+from pydantic import BaseModel, Field
 import asyncio
 
-class FileType(Enum):
+class FileType(str, Enum):
     PDF = "pdf"
     DOCX = "docx"
     TXT = "txt"
 
-class ModelType(Enum):
-    GPT4V = "gpt4v"
-    CLAUDE3 = "claude3"
+class ModelType(str, Enum):
+    gpt-4o = "gpt-4o"
+    claude-3.5-latest = "claude-3.5-latest"
     OLAMA = "olama"
 
-@dataclass
-class TranslationConfig:
+class TranslationConfig(BaseModel):
     source_lang: str
     target_lang: str
     model: ModelType
     algorithm: Literal["page", "sliding-window"]
     input_file: Path
-    output_file: Optional[Path]
+    output_file: Optional[Path] = None
     benchmark: bool = False
     
     # Algorithm-specific settings
-    page_seam_overlap: int = 200
-    window_size: int = 2000
-    overlap_size: int = 200
+    page_seam_overlap: int = Field(default=200, gt=0)
+    window_size: int = Field(default=2000, gt=0)
+    overlap_size: int = Field(default=200, gt=0)
 
-@dataclass
-class TranslationResult:
+    class Config:
+        frozen = True  # Make config immutable
+
+class TranslationResult(BaseModel):
     text: str
-    tokens_used: int
-    cost: float
-    time_taken: float
+    tokens_used: int = Field(ge=0)
+    cost: float = Field(ge=0.0)
+    time_taken: float = Field(ge=0.0)
+
+    class Config:
+        frozen = True
 ```
 
 ### 2. Document Processing
 
 ```python
-class DocumentProcessor:
-    async def load_document(self, file_path: Path) -> Union[List[bytes], List[str]]:
-        """Load document and return either list of page images (PDF) or text chunks."""
-        file_type = self._get_file_type(file_path)
-        
-        if file_type == FileType.PDF:
-            return await self._process_pdf(file_path)
-        elif file_type == FileType.DOCX:
-            return await self._process_docx(file_path)
-        else:
-            return await self._process_txt(file_path)
+from typing import Protocol
+import io
+from pathlib import Path
 
-    async def _process_pdf(self, file_path: Path) -> List[bytes]:
-        """Convert PDF pages to images."""
-        from pdf2image import convert_from_path
-        
-        images = []
-        pages = convert_from_path(file_path)
-        for page in pages:
-            with io.BytesIO() as bio:
-                page.save(bio, format='PNG')
-                images.append(bio.getvalue())
-        return images
+class DocumentContent(BaseModel):
+    """Represents processed document content"""
+    pages: List[Union[bytes, str]]
+    file_type: FileType
+    metadata: dict = Field(default_factory=dict)
 
-    async def _process_docx(self, file_path: Path) -> List[str]:
-        """Extract text from Word document, preserving page breaks."""
-        from docx import Document
+async def load_document(file_path: Path) -> DocumentContent:
+    """Load document and return either list of page images (PDF) or text chunks."""
+    file_type = _get_file_type(file_path)
+    
+    processors = {
+        FileType.PDF: _process_pdf,
+        FileType.DOCX: _process_docx,
+        FileType.TXT: _process_txt
+    }
+    
+    processor = processors.get(file_type)
+    if not processor:
+        raise ValueError(f"Unsupported file type: {file_type}")
         
-        doc = Document(file_path)
-        pages = []
-        current_page = []
-        
-        for para in doc.paragraphs:
-            if self._is_page_break(para):
-                pages.append('\n'.join(current_page))
-                current_page = []
-            else:
-                current_page.append(para.text)
-                
-        if current_page:
+    pages = await processor(file_path)
+    return DocumentContent(pages=pages, file_type=file_type)
+
+async def _process_pdf(file_path: Path) -> List[bytes]:
+    """Convert PDF pages to images."""
+    from pdf2image import convert_from_path
+    
+    images = []
+    pages = convert_from_path(file_path)
+    for page in pages:
+        with io.BytesIO() as bio:
+            page.save(bio, format='PNG')
+            images.append(bio.getvalue())
+    return images
+
+async def _process_docx(file_path: Path) -> List[str]:
+    """Extract text from Word document, preserving page breaks."""
+    from docx import Document
+    
+    doc = Document(file_path)
+    pages = []
+    current_page = []
+    
+    for para in doc.paragraphs:
+        if _is_page_break(para):
             pages.append('\n'.join(current_page))
-        return pages
+            current_page = []
+        else:
+            current_page.append(para.text)
+            
+    if current_page:
+        pages.append('\n'.join(current_page))
+    return pages
 ```
 
-### 3. Translation Algorithms
-
-#### A. Page-by-Page Translation
+### 3. Translation Functions
 
 ```python
-class PageTranslator:
-    def __init__(self, config: TranslationConfig):
-        self.config = config
-        self.model = self._initialize_model()
+async def translate_document(
+    content: DocumentContent,
+    config: TranslationConfig
+) -> TranslationResult:
+    """Main translation function that delegates to appropriate algorithm"""
+    if config.algorithm == "page":
+        return await translate_page_by_page(content, config)
+    else:
+        return await translate_sliding_window(content, config)
 
-    async def translate(self, pages: Union[List[bytes], List[str]]) -> TranslationResult:
-        start_time = time.time()
-        total_tokens = 0
-        translated_pages = []
-
-        # Translate each page
-        for i, page in enumerate(pages):
-            if isinstance(page, bytes):
-                # Image-based translation for PDFs
-                translation = await self._translate_image(
-                    image=page,
-                    source_lang=self.config.source_lang,
-                    target_lang=self.config.target_lang
-                )
-            else:
-                # Text-based translation
-                translation = await self._translate_text(
-                    text=page,
-                    source_lang=self.config.source_lang,
-                    target_lang=self.config.target_lang
-                )
-            
-            translated_pages.append(translation.text)
-            total_tokens += translation.tokens_used
-
-        # Perform seam repair
-        final_text = await self._repair_seams(translated_pages)
-        
-        return TranslationResult(
-            text=final_text,
-            tokens_used=total_tokens,
-            cost=self._calculate_cost(total_tokens),
-            time_taken=time.time() - start_time
+async def translate_page_by_page(
+    content: DocumentContent,
+    config: TranslationConfig
+) -> TranslationResult:
+    """Page-by-page translation with seam repair"""
+    start_time = time.time()
+    total_tokens = 0
+    translated_pages = []
+    
+    model = initialize_model(config.model)
+    
+    # Translate each page
+    for page in content.pages:
+        translation = await (
+            translate_image(page, config)
+            if isinstance(page, bytes)
+            else translate_text(page, config)
         )
-
-    async def _repair_seams(self, translated_pages: List[str]) -> str:
-        """Repair page boundaries for better continuity."""
-        final_chunks = []
         
-        for i in range(len(translated_pages) - 1):
-            # Extract overlap regions
-            current_page_end = translated_pages[i][-self.config.page_seam_overlap:]
-            next_page_start = translated_pages[i+1][:self.config.page_seam_overlap]
-            
-            # Request model to smooth the transition
-            repaired_seam = await self._smooth_transition(
-                current_page_end,
-                next_page_start,
-                self.config.target_lang
-            )
-            
-            # Replace original text with repaired version
-            if i == 0:
-                final_chunks.append(translated_pages[i][:-self.config.page_seam_overlap])
-            final_chunks.append(repaired_seam)
-            
-            if i == len(translated_pages) - 2:
-                final_chunks.append(translated_pages[i+1][self.config.page_seam_overlap:])
-                
-        return ''.join(final_chunks)
+        translated_pages.append(translation.text)
+        total_tokens += translation.tokens_used
+    
+    # Perform seam repair
+    final_text = await repair_seams(translated_pages, config)
+    
+    return TranslationResult(
+        text=final_text,
+        tokens_used=total_tokens,
+        cost=calculate_cost(total_tokens, config.model),
+        time_taken=time.time() - start_time
+    )
+
+async def translate_sliding_window(
+    content: DocumentContent,
+    config: TranslationConfig
+) -> TranslationResult:
+    """Sliding window translation for long documents"""
+    start_time = time.time()
+    total_tokens = 0
+    
+    # Join all pages into single text for sliding window
+    text = "\n\n".join(content.pages) if isinstance(content.pages[0], str) else ""
+    
+    # Create overlapping chunks
+    chunks = create_chunks(
+        text,
+        window_size=config.window_size,
+        overlap_size=config.overlap_size
+    )
+    
+    # Translate chunks
+    translated_chunks = []
+    for chunk in chunks:
+        translation = await translate_text(chunk, config)
+        translated_chunks.append(translation.text)
+        total_tokens += translation.tokens_used
+        
+    # Merge overlapping translations
+    final_text = merge_chunks(translated_chunks, config.overlap_size)
+    
+    return TranslationResult(
+        text=final_text,
+        tokens_used=total_tokens,
+        cost=calculate_cost(total_tokens, config.model),
+        time_taken=time.time() - start_time
+    )
 ```
 
-#### B. Sliding Window Translation
-
-```python
-class SlidingWindowTranslator:
-    def __init__(self, config: TranslationConfig):
-        self.config = config
-        self.model = self._initialize_model()
-
-    async def translate(self, text: str) -> TranslationResult:
-        start_time = time.time()
-        total_tokens = 0
-        
-        # Create overlapping chunks
-        chunks = self._create_chunks(
-            text,
-            window_size=self.config.window_size,
-            overlap_size=self.config.overlap_size
-        )
-        
-        # Translate chunks
-        translated_chunks = []
-        for chunk in chunks:
-            translation = await self._translate_chunk(
-                text=chunk,
-                source_lang=self.config.source_lang,
-                target_lang=self.config.target_lang
-            )
-            translated_chunks.append(translation.text)
-            total_tokens += translation.tokens_used
-            
-        # Merge overlapping translations
-        final_text = self._merge_chunks(translated_chunks)
-        
-        return TranslationResult(
-            text=final_text,
-            tokens_used=total_tokens,
-            cost=self._calculate_cost(total_tokens),
-            time_taken=time.time() - start_time
-        )
-
-    def _create_chunks(self, text: str, window_size: int, overlap_size: int) -> List[str]:
-        """Split text into overlapping chunks."""
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            end = start + window_size
-            chunk = text[start:end]
-            chunks.append(chunk)
-            start = end - overlap_size
-            
-        return chunks
-
-    def _merge_chunks(self, chunks: List[str]) -> str:
-        """Merge translated chunks, handling overlaps."""
-        if not chunks:
-            return ""
-            
-        result = [chunks[0]]
-        overlap_size = self.config.overlap_size
-        
-        for i in range(1, len(chunks)):
-            current_chunk = chunks[i]
-            previous_chunk = chunks[i-1]
-            
-            # Find best matching point in overlap region
-            match_point = self._find_best_merge_point(
-                previous_chunk[-overlap_size:],
-                current_chunk[:overlap_size]
-            )
-            
-            # Append non-overlapping portion
-            result.append(current_chunk[match_point:])
-            
-        return ''.join(result)
-```
-
-### 4. Model Interface using LiteLLM
+### 4. Model Interface
 
 ```python
 from litellm import completion
 import base64
 
-class ModelInterface:
-    """Unified interface for all models using LiteLLM."""
-    
-    def __init__(self, model_name: str):
-        self.model_name = model_name
-        
-    async def translate_text(
-        self,
-        text: str,
-        source_lang: str,
-        target_lang: str
-    ) -> TranslationResult:
-        """Translate text using any text-to-text model."""
-        prompt = f"Translate the following text from {source_lang} to {target_lang}. Maintain all formatting and structure:\n\n{text}"
-        
-        response = await completion(
-            model=self.model_name,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3  # Lower temperature for more consistent translations
-        )
-        
-        return TranslationResult(
-            text=response.choices[0].message.content,
-            tokens_used=response.usage.total_tokens,
-            cost=response.usage.cost,  # LiteLLM provides cost directly
-            time_taken=response.usage.completion_time  # LiteLLM provides latency
-        )
+class TranslationResponse(BaseModel):
+    """Structured response from translation model"""
+    text: str
+    tokens_used: int
+    cost: float
+    time_taken: float
 
-    async def translate_image(
-        self,
-        image: bytes,
-        source_lang: str,
-        target_lang: str
-    ) -> TranslationResult:
-        """Translate content from image using multimodal models."""
-        prompt = f"Translate this page from {source_lang} to {target_lang}. Maintain all formatting and structure."
-        
-        # Prepare image for multimodal models
-        image_content = {
-            "type": "image_url",
-            "image_url": {
-                "url": f"data:image/png;base64,{base64.b64encode(image).decode()}"
-            }
+async def translate_text(
+    text: str,
+    config: TranslationConfig
+) -> TranslationResponse:
+    """Translate text using any text-to-text model."""
+    prompt = f"Translate the following text from {config.source_lang} to {config.target_lang}. Maintain all formatting and structure:\n\n{text}"
+    
+    response = await completion(
+        model=config.model.value,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3
+    )
+    
+    return TranslationResponse(
+        text=response.choices[0].message.content,
+        tokens_used=response.usage.total_tokens,
+        cost=response.usage.cost,
+        time_taken=response.usage.completion_time
+    )
+
+async def translate_image(
+    image: bytes,
+    config: TranslationConfig
+) -> TranslationResponse:
+    """Translate content from image using multimodal models."""
+    prompt = f"Translate this page from {config.source_lang} to {config.target_lang}. Maintain all formatting and structure."
+    
+    image_content = {
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:image/png;base64,{base64.b64encode(image).decode()}"
         }
-        
-        response = await completion(
-            model=self.model_name,  # Will work with GPT-4V, Claude 3, etc.
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    image_content
-                ]
-            }],
-            temperature=0.3
-        )
-        
-        return TranslationResult(
-            text=response.choices[0].message.content,
-            tokens_used=response.usage.total_tokens,
-            cost=response.usage.cost,
-            time_taken=response.usage.completion_time
-        )
+    }
+    
+    response = await completion(
+        model=config.model.value,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                image_content
+            ]
+        }],
+        temperature=0.3
+    )
+    
+    return TranslationResponse(
+        text=response.choices[0].message.content,
+        tokens_used=response.usage.total_tokens,
+        cost=response.usage.cost,
+        time_taken=response.usage.completion_time
+    )
 ```
 
 ## Project Structure
