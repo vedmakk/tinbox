@@ -154,7 +154,7 @@ Common language codes (ISO 639-1):
 from enum import Enum
 from typing import List, Optional, Union, Literal
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import asyncio
 
 class FileType(str, Enum):
@@ -181,8 +181,7 @@ class TranslationConfig(BaseModel):
     window_size: int = Field(default=2000, gt=0)
     overlap_size: int = Field(default=200, gt=0)
 
-    class Config:
-        frozen = True  # Make config immutable
+    model_config = ConfigDict(frozen=True)  # Make config immutable
 
 class TranslationResult(BaseModel):
     text: str
@@ -190,8 +189,7 @@ class TranslationResult(BaseModel):
     cost: float = Field(ge=0.0)
     time_taken: float = Field(ge=0.0)
 
-    class Config:
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 ```
 
 ### 2. Document Processing
