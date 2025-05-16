@@ -375,6 +375,25 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
 
 
 @pytest.mark.asyncio
+async def test_auto_language_detection(translator: LiteLLMTranslator, mock_completion):
+    """Test handling of 'auto' as source language."""
+    request = TranslationRequest(
+        source_lang="auto",
+        target_lang="es",
+        content="Hello, world!",
+        content_type="text/plain",
+        model=ModelType.ANTHROPIC,
+        model_params={"model_name": "claude-3-sonnet"},
+    )
+
+    response = await translator.translate(request)
+    assert response.text == "Translated text"
+    assert response.tokens_used == 10
+    assert response.cost == 0.001
+    assert response.time_taken == 0.5
+
+
+@pytest.mark.asyncio
 async def test_mixed_content_handling(translator: LiteLLMTranslator, mock_completion):
     """Test handling of mixed content types."""
     # Text with embedded image-like content

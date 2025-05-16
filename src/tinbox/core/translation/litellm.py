@@ -212,11 +212,11 @@ class LiteLLMTranslator(ModelInterface):
             ):
                 raise TranslationError("Translation failed: Empty content")
 
-            # Validate language codes (2 or 3 letter codes)
-            if not request.source_lang.isalpha() or len(request.source_lang) not in [
+            # Validate language codes (2 or 3 letter codes, or 'auto' for source)
+            if request.source_lang != "auto" and (not request.source_lang.isalpha() or len(request.source_lang) not in [
                 2,
                 3,
-            ]:
+            ]):
                 raise TranslationError("Translation failed: Invalid language code")
             if not request.target_lang.isalpha() or len(request.target_lang) not in [
                 2,
