@@ -7,7 +7,10 @@
 
 ## Common Commands
 
-- TBD
+Use `tinbox --help` to see all available options. A few useful commands:
+
+- `tinbox --to es document.pdf` — translate a PDF to Spanish
+- `tinbox --from zh --to en document.docx` — translate a Word document from Chinese to English
 
 ## Project-Specific Information
 
