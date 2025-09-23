@@ -109,6 +109,31 @@ pip install "tinbox[pdf]"
 pip install "tinbox[docx]"
 ```
 
+### System Dependencies
+
+For PDF processing, Tinbox requires `poppler-utils` to be installed on your system:
+
+#### macOS
+
+```bash
+brew install poppler
+```
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+sudo apt-get update
+sudo apt-get install poppler-utils
+```
+
+#### Windows
+
+1. Download poppler for Windows from [here](https://github.com/oschwartz10612/poppler-windows/releases/)
+2. Extract the files and add the `bin` directory to your system PATH
+3. Alternatively, use Chocolatey: `choco install poppler`
+
+**Why is this needed?** Tinbox processes PDFs as images (no OCR required) using the `pdf2image` Python library, which depends on poppler's `pdfinfo` and `pdftoppm` utilities for PDF manipulation.
+
 ### 🔑 API Key Setup
 
 Before using cloud models, set up your API keys:

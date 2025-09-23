@@ -430,6 +430,9 @@ async def test_translate_document_context_aware(
 
     mock_translator.translate = AsyncMock(side_effect=mock_context_translate)
 
+    # Configure checkpoint manager to return no checkpoint so translation actually runs
+    mock_checkpoint_manager.load = AsyncMock(return_value=None)
+
     # Test the main translate_document function
     result = await translate_document(
         test_content,
@@ -464,15 +467,14 @@ async def test_translate_document_algorithm_routing():
         metadata={},
     )
 
-    # Test unknown algorithm
-    config = TranslationConfig(
-        source_lang="en",
-        target_lang="fr",
-        model=ModelType.ANTHROPIC,
-        model_name="claude-3-sonnet",
-        algorithm="unknown-algorithm",
-        input_file=Path("test.txt"),
-    )
-
-    with pytest.raises(TranslationError, match="Unknown algorithm: unknown-algorithm"):
-        await translate_document(content, config, mock_translator)
+    # Test unknown algorithm - should fail at config validation time
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError, match="Input should be 'page', 'sliding-window' or 'context-aware'"):
+        config = TranslationConfig(
+            source_lang="en",
+            target_lang="fr",
+            model=ModelType.ANTHROPIC,
+            model_name="claude-3-sonnet",
+            algorithm="unknown-algorithm",
+            input_file=Path("test.txt"),
+        )

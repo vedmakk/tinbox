@@ -12,7 +12,7 @@ from tinbox.cli import app
 from tinbox.core.cost import CostEstimate
 from tinbox.core.processor import DocumentContent
 from tinbox.core.types import FileType, ModelType, TranslationResult, TranslationConfig
-from tinbox.core.translation.interface import ModelInterface
+from tinbox.core.translation.interface import ModelInterface, TranslationResponse
 
 
 @pytest.fixture
@@ -176,12 +176,13 @@ def test_cli_context_aware_default(cli_runner, tmp_path):
             content_type="text/plain",
             metadata={}
         )
-        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+        # Mock translate_document to return a proper result object
+        mock_translate.return_value = TranslationResponse(
             text="Translated text",
             tokens_used=100,
             cost=0.01,
             time_taken=5.0
-        ))
+        )
         
         # Don't specify algorithm - should default to context-aware
         result = cli_runner.invoke(app, [
@@ -258,12 +259,13 @@ def test_cli_context_aware_default(cli_runner, tmp_path):
             content_type="text/plain",
             metadata={}
         )
-        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+        # Mock translate_document to return a proper result object
+        mock_translate.return_value = TranslationResponse(
             text="Translated text",
             tokens_used=100,
             cost=0.01,
             time_taken=5.0
-        ))
+        )
         
         # Don't specify algorithm - should default to context-aware
         result = cli_runner.invoke(app, [
@@ -410,12 +412,13 @@ def test_cli_context_aware_default(cli_runner, tmp_path):
             content_type="text/plain",
             metadata={}
         )
-        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+        # Mock translate_document to return a proper result object
+        mock_translate.return_value = TranslationResponse(
             text="Translated text",
             tokens_used=100,
             cost=0.01,
             time_taken=5.0
-        ))
+        )
         
         # Don't specify algorithm - should default to context-aware
         result = cli_runner.invoke(app, [
@@ -499,12 +502,13 @@ def test_cli_context_aware_default(cli_runner, tmp_path):
             content_type="text/plain",
             metadata={}
         )
-        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+        # Mock translate_document to return a proper result object
+        mock_translate.return_value = TranslationResponse(
             text="Translated text",
             tokens_used=100,
             cost=0.01,
             time_taken=5.0
-        ))
+        )
         
         # Don't specify algorithm - should default to context-aware
         result = cli_runner.invoke(app, [
@@ -585,12 +589,13 @@ def test_cli_context_aware_default(cli_runner, tmp_path):
             content_type="text/plain",
             metadata={}
         )
-        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+        # Mock translate_document to return a proper result object
+        mock_translate.return_value = TranslationResponse(
             text="Translated text",
             tokens_used=100,
             cost=0.01,
             time_taken=5.0
-        ))
+        )
         
         # Don't specify algorithm - should default to context-aware
         result = cli_runner.invoke(app, [

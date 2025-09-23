@@ -92,6 +92,9 @@ def mock_streaming_completion():
                         "completion_time": 0.5,
                     },
                 ),
+                "_hidden_params": {
+                    "response_cost": 0.001
+                },
             },
         )
 
@@ -163,7 +166,7 @@ async def test_streaming_translation(
         assert chunk.text == "Translated text"
         assert chunk.tokens_used == 10
         assert chunk.cost == 0.001
-        assert chunk.time_taken == 0.5
+        assert chunk.time_taken > 0  # Real time calculation
 
 
 @pytest.mark.asyncio
