@@ -180,7 +180,7 @@ async def translate_page_by_page(
 
         # Check for checkpoint
         if checkpoint_manager and config.resume_from_checkpoint:
-            checkpoint = await checkpoint_manager.load()
+            checkpoint = checkpoint_manager.load()
             if checkpoint:
                 translated_pages = list(checkpoint.translated_chunks.values())
                 total_tokens = checkpoint.token_usage
@@ -313,7 +313,7 @@ async def translate_sliding_window(
         # Check for checkpoint
         if checkpoint_manager and config.resume_from_checkpoint:
             logger.info("Checking for checkpoint")
-            checkpoint = await checkpoint_manager.load()
+            checkpoint = checkpoint_manager.load()
             if checkpoint and checkpoint.translated_chunks:
                 logger.info("Found valid checkpoint")
                 time_taken = (datetime.now() - start_time).total_seconds()
@@ -777,10 +777,11 @@ async def translate_context_aware(
         # Check for checkpoint
         if checkpoint_manager and config.resume_from_checkpoint:
             logger.info("Checking for checkpoint")
-            checkpoint = await checkpoint_manager.load()
+            checkpoint = checkpoint_manager.load()
             if checkpoint and checkpoint.translated_chunks:
                 logger.info("Found valid checkpoint, resuming from saved state")
                 time_taken = (datetime.now() - start_time).total_seconds()
+                ## TODO: Here we shouldn't return, but continue!
                 return TranslationResponse(
                     text="".join(checkpoint.translated_chunks.values()),
                     tokens_used=checkpoint.token_usage,
