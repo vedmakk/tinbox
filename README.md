@@ -154,8 +154,14 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
    ```
 
 5. **Using different output formats**
+
    ```bash
    tinbox translate --model openai:gpt-4o --to es --format json --output result.json document.pdf
+   ```
+
+6. **Enable checkpointing for large documents**
+   ```bash
+   tinbox translate --to es --checkpoint-dir ./checkpoints large_document.pdf
    ```
 
 ### 💡 Tips for Best Results
@@ -177,8 +183,14 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
    - No OCR needed - just point to your PDF!
 
 4. **For Best Performance**
+
    - Use local models via Ollama for no API costs
    - Cloud models (OpenAI, Anthropic, Google) for highest quality and faster processing
+
+5. **For Long-Running Translations**
+   - Enable checkpointing to resume interrupted translations: `--checkpoint-dir ./checkpoints`
+   - Adjust checkpoint frequency for very large documents: `--checkpoint-frequency 10`
+   - Checkpoints automatically resume from where you left off if translation is interrupted
 
 ## 📖 Detailed Documentation
 
@@ -202,6 +214,13 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
 | `--split-token`   | Custom token to split text on (context-aware only)                | None            |
 | `--window-size`   | Size of translation window (sliding-window only)                  | 2000 tokens     |
 | `--overlap-size`  | Overlap between windows (sliding-window only)                     | 200 tokens      |
+
+#### Checkpoint Options
+
+| Option                   | Description                                             | Default |
+| ------------------------ | ------------------------------------------------------- | ------- |
+| `--checkpoint-dir`       | Directory to store translation checkpoints for resuming | None    |
+| `--checkpoint-frequency` | Save checkpoint every N pages/chunks                    | 1       |
 
 #### Output Format Options
 
@@ -307,7 +326,20 @@ tinbox translate --to es --format markdown document.pdf
    tinbox translate --to de --max-cost 5.00 --model openai:gpt-4o document.pdf
    ```
 
-5. **Different Model Providers**
+5. **Checkpoint and Resume Support**
+
+   ```bash
+   # Enable checkpointing for large documents (saves progress every page/chunk)
+   tinbox translate --to es --checkpoint-dir ./checkpoints document.pdf
+
+   # Custom checkpoint frequency (save every 5 pages/chunks)
+   tinbox translate --to fr --checkpoint-dir ./checkpoints --checkpoint-frequency 5 large_document.txt
+
+   # Resume interrupted translation (automatically detects and resumes from checkpoint)
+   tinbox translate --to es --checkpoint-dir ./checkpoints document.pdf
+   ```
+
+6. **Different Model Providers**
 
    ```bash
    # OpenAI GPT-4
@@ -320,7 +352,7 @@ tinbox translate --to es --format markdown document.pdf
    tinbox translate --to es --model gemini:gemini-pro document.pdf
    ```
 
-6. **Benchmarking Different Models**
+7. **Benchmarking Different Models**
    ```bash
    tinbox translate --to de --benchmark --model openai:gpt-4o document.pdf
    ```

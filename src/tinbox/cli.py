@@ -198,6 +198,16 @@ def translate(
         "--verbose",
         help="Show detailed progress information.",
     ),
+    checkpoint_dir: Optional[Path] = typer.Option(
+        None,
+        "--checkpoint-dir",
+        help="Directory to store translation checkpoints for resuming interrupted translations.",
+    ),
+    checkpoint_frequency: int = typer.Option(
+        1,
+        "--checkpoint-frequency",
+        help="Save checkpoint every N pages/chunks (default: 1).",
+    ),
 ) -> None:
     """Translate a document using LLMs."""
     try:
@@ -247,6 +257,8 @@ def translate(
             verbose=verbose,
             context_size=context_size,
             custom_split_token=custom_split_token,
+            checkpoint_dir=checkpoint_dir,
+            checkpoint_frequency=checkpoint_frequency,
         )
 
         # Load document
