@@ -87,7 +87,7 @@ class CheckpointManager:
                 json.dump(checkpoint_data, f, indent=2)
             temp_path.rename(checkpoint_path)
 
-            self._logger.info(
+            self._logger.debug(
                 f"Saved checkpoint to {checkpoint_path}",
                 pages=len(state.completed_pages) + len(state.failed_pages),
                 tokens=state.token_usage,
@@ -144,7 +144,7 @@ class CheckpointManager:
                 time_taken=data["time_taken"],
             )
 
-            self._logger.info(
+            self._logger.debug(
                 f"Loaded checkpoint from {checkpoint_path}",
                 pages=len(state.completed_pages) + len(state.failed_pages),
                 tokens=state.token_usage,
