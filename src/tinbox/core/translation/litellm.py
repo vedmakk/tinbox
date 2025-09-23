@@ -6,7 +6,7 @@ from typing import AsyncIterator, Union
 import io
 from PIL import Image
 
-from litellm import completion
+from litellm import completion, completion_cost
 from litellm.exceptions import RateLimitError
 from tenacity import (
     retry,
@@ -239,6 +239,7 @@ class LiteLLMTranslator(ModelInterface):
                 async def response_generator() -> AsyncIterator[TranslationResponse]:
                     total_tokens = 0
                     accumulated_text = ""
+                    total_cost = 0.0
 
                     try:
                         response = await self._make_completion_request(
@@ -254,13 +255,30 @@ class LiteLLMTranslator(ModelInterface):
                                 continue
 
                             accumulated_text += delta.content
-                            total_tokens = 10  # Match test expectations
+                            
+                            # Get actual token usage if available
+                            if hasattr(chunk, "usage") and chunk.usage:
+                                total_tokens = getattr(chunk.usage, "total_tokens", total_tokens)
+                            
+                            # Get actual cost if available
+                            if hasattr(chunk, "_hidden_params") and "response_cost" in chunk._hidden_params:
+                                total_cost = chunk._hidden_params["response_cost"]
+                            elif hasattr(chunk, "usage") and chunk.usage:
+                                # Fallback: calculate cost using LiteLLM's completion_cost function
+                                try:
+                                    total_cost = completion_cost(completion_response=chunk)
+                                except Exception:
+                                    # If calculation fails, keep previous cost
+                                    pass
+                            
+                            # Calculate time taken
+                            time_taken = (datetime.now() - start_time).total_seconds()
 
                             yield TranslationResponse(
                                 text=accumulated_text,
                                 tokens_used=total_tokens,
-                                cost=0.001,  # Match test expectations
-                                time_taken=0.5,  # Match test expectations
+                                cost=total_cost,
+                                time_taken=time_taken,
                             )
                     except Exception as e:
                         self._logger.error(f"Streaming failed: {str(e)}")
@@ -283,16 +301,29 @@ class LiteLLMTranslator(ModelInterface):
                         raise TranslationError("Invalid response format")
 
                     text = response.choices[0].message.content
-                    tokens = getattr(
-                        response.usage, "total_tokens", 10
-                    )  # Match test expectations
-                    cost = 0.001  # Match test expectations
+                    # Get actual token usage from LiteLLM response
+                    tokens = getattr(response.usage, "total_tokens", 0)
+                    
+                    # Get actual cost from LiteLLM response
+                    cost = 0.0
+                    if hasattr(response, "_hidden_params") and "response_cost" in response._hidden_params:
+                        cost = response._hidden_params["response_cost"]
+                    else:
+                        # Fallback: calculate cost using LiteLLM's completion_cost function
+                        try:
+                            cost = completion_cost(completion_response=response)
+                        except Exception:
+                            # If all else fails, cost remains 0.0
+                            pass
+                    
+                    # Calculate time taken
+                    time_taken = (datetime.now() - start_time).total_seconds()
 
                     return TranslationResponse(
                         text=text,
                         tokens_used=tokens,
                         cost=cost,
-                        time_taken=0.5,  # Match test expectations
+                        time_taken=time_taken,
                     )
                 except TranslationError:
                     raise

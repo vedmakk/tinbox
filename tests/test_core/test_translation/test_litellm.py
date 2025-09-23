@@ -53,6 +53,9 @@ def mock_completion():
                         "completion_time": 0.5,
                     },
                 ),
+                "_hidden_params": {
+                    "response_cost": 0.001
+                },
             },
         )
         yield mock
@@ -113,7 +116,7 @@ async def test_text_translation(translator: LiteLLMTranslator, mock_completion):
     assert response.text == "Translated text"
     assert response.tokens_used == 10
     assert response.cost == 0.001
-    assert response.time_taken == 0.5
+    assert response.time_taken > 0  # Real time calculation
 
 
 @pytest.mark.asyncio
@@ -139,7 +142,7 @@ async def test_image_translation(
     assert response.text == "Translated text"
     assert response.tokens_used == 10
     assert response.cost == 0.001
-    assert response.time_taken == 0.5
+    assert response.time_taken > 0  # Real time calculation
 
 
 @pytest.mark.asyncio
@@ -390,7 +393,7 @@ async def test_auto_language_detection(translator: LiteLLMTranslator, mock_compl
     assert response.text == "Translated text"
     assert response.tokens_used == 10
     assert response.cost == 0.001
-    assert response.time_taken == 0.5
+    assert response.time_taken > 0  # Real time calculation
 
 
 @pytest.mark.asyncio
