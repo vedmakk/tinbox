@@ -46,13 +46,13 @@ class LiteLLMTranslator(ModelInterface):
     def __init__(
         self,
         temperature: float = 0.3,
-        max_tokens: int = 4096,
+        max_tokens: int = 100000,
     ) -> None:
         """Initialize the translator.
 
         Args:
             temperature: Model temperature (randomness). Defaults to 0.3.
-            max_tokens: Maximum tokens in response. Defaults to 4096.
+            max_tokens: Maximum tokens in response. Defaults to 100000.
         """
         self.temperature = temperature
         self.max_tokens = max_tokens
