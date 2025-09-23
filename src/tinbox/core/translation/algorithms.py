@@ -180,7 +180,7 @@ async def translate_page_by_page(
 
         # Check for checkpoint
         if checkpoint_manager and config.resume_from_checkpoint:
-            checkpoint = checkpoint_manager.load()
+            checkpoint = await checkpoint_manager.load()
             if checkpoint:
                 translated_pages = list(checkpoint.translated_chunks.values())
                 total_tokens = checkpoint.token_usage
@@ -313,7 +313,7 @@ async def translate_sliding_window(
         # Check for checkpoint
         if checkpoint_manager and config.resume_from_checkpoint:
             logger.info("Checking for checkpoint")
-            checkpoint = checkpoint_manager.load()
+            checkpoint = await checkpoint_manager.load()
             if checkpoint and checkpoint.translated_chunks:
                 logger.info("Found valid checkpoint")
                 time_taken = (datetime.now() - start_time).total_seconds()
@@ -616,11 +616,11 @@ def smart_text_split(
 
     Priority order:
     1. Custom split token (if provided) - ignores target_size
-    2. Paragraph breaks (\n\n)
-    3. Sentence endings ([.!?]\s+)
-    4. Line breaks (\n)
-    5. Clause boundaries ([;:,]\s+)
-    6. Word boundaries (\s+)
+    2. Paragraph breaks (\\n\\n)
+    3. Sentence endings ([.!?]\\s+)
+    4. Line breaks (\\n)
+    5. Clause boundaries ([;:,]\\s+)
+    6. Word boundaries (\\s+)
 
     Args:
         text: Input text to split
@@ -700,12 +700,15 @@ def smart_text_split(
             chunks.append(chunk)
         
         # Move to the next position
-        current_pos = actual_end
-        
-        # Ensure we make progress (avoid infinite loops)
-        # TODO: Is this needed?
-        if current_pos >= actual_end:
-            current_pos += 1
+        # Only skip ahead if we found no natural split point (best_split_pos == target_size)
+        if best_split_pos == len(chunk_text) and current_pos + best_split_pos < len(text):
+            # No natural boundary found, ensure we make progress by skipping whitespace
+            current_pos = actual_end
+            while current_pos < len(text) and text[current_pos].isspace():
+                current_pos += 1
+        else:
+            # Natural boundary found, continue from there
+            current_pos = actual_end
 
     return chunks
 
@@ -777,7 +780,7 @@ async def translate_context_aware(
         # Check for checkpoint
         if checkpoint_manager and config.resume_from_checkpoint:
             logger.info("Checking for checkpoint")
-            checkpoint = checkpoint_manager.load()
+            checkpoint = await checkpoint_manager.load()
             if checkpoint and checkpoint.translated_chunks:
                 logger.info("Found valid checkpoint, resuming from saved state")
                 time_taken = (datetime.now() - start_time).total_seconds()

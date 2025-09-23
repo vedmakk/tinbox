@@ -457,10 +457,13 @@ class TestTranslateContextAware:
         assert result.text
         assert "Translated:" in result.text
 
-        # Verify the combined text was processed
+        # Verify the combined text was processed (should be in context format)
         first_call = mock_translator.translate.call_args_list[0][0][0]
-        combined_text = "First page content.\n\nSecond page content.\n\nThird page content."
-        assert combined_text in first_call.content
+        # The first chunk should be wrapped in context tags
+        assert "[TRANSLATE_THIS]" in first_call.content
+        assert "[/TRANSLATE_THIS]" in first_call.content
+        assert "First page content." in first_call.content
+        assert "Second page content." in first_call.content
 
     async def test_translate_without_checkpoint_manager(
         self, context_aware_config, mock_translator

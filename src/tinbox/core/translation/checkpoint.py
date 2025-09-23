@@ -98,7 +98,7 @@ class CheckpointManager:
             self._logger.error(f"Failed to save checkpoint: {str(e)}")
             raise
 
-    def load(self) -> Optional[TranslationState]:
+    async def load(self) -> Optional[TranslationState]:
         """Load translation state from a checkpoint file.
 
         Returns:
