@@ -18,6 +18,7 @@ from tinbox.core import (
     TranslationResult,
     translate_document,
 )
+from tinbox.core.translation.checkpoint import CheckpointManager
 from tinbox.core.cost import estimate_cost
 from tinbox.core.processor import load_document
 from tinbox.core.translation import create_translator
@@ -267,6 +268,11 @@ def translate(
         # Initialize model interface
         translator = create_translator(config)
 
+        # Create checkpoint manager if checkpoint directory is specified
+        checkpoint_manager = None
+        if config.checkpoint_dir:
+            checkpoint_manager = CheckpointManager(config)
+
         # Show progress
         with Progress(
             SpinnerColumn(),
@@ -284,6 +290,7 @@ def translate(
                     config=config,
                     translator=translator,
                     progress=progress,
+                    checkpoint_manager=checkpoint_manager,
                 )
             )
 
