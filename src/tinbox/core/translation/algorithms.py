@@ -298,7 +298,7 @@ async def translate_sliding_window(
     Raises:
         TranslationError: If translation fails
     """
-    print("Starting sliding window translation")  # Debug print
+    logger.info("Starting sliding window translation")
 
     if isinstance(content.pages[0], bytes):
         raise TranslationError(
@@ -312,10 +312,10 @@ async def translate_sliding_window(
     try:
         # Check for checkpoint
         if checkpoint_manager and config.resume_from_checkpoint:
-            print("Checking for checkpoint")  # Debug print
+            logger.info("Checking for checkpoint")
             checkpoint = await checkpoint_manager.load()
             if checkpoint and checkpoint.translated_chunks:
-                print("Found valid checkpoint")  # Debug print
+                logger.info("Found valid checkpoint")
                 time_taken = (datetime.now() - start_time).total_seconds()
                 return TranslationResponse(
                     text="\n\n".join(checkpoint.translated_chunks.values()),
@@ -326,7 +326,7 @@ async def translate_sliding_window(
 
         # Join all pages into single text
         text = "\n\n".join(content.pages)
-        print(f"Combined text: {text}")  # Debug print
+        logger.debug(f"Combined text: {text}")
 
         # Use configured window size and overlap size, with fallbacks
         window_size = config.window_size if config.window_size is not None else 1000
@@ -335,9 +335,9 @@ async def translate_sliding_window(
             if config.overlap_size is not None
             else min(100, window_size // 4)
         )
-        print(
+        logger.info(
             f"Using window size: {window_size}, overlap size: {overlap_size}"
-        )  # Debug print
+        )
 
         # Create windows
         windows = create_windows(
@@ -345,7 +345,7 @@ async def translate_sliding_window(
             window_size,
             overlap_size,
         )
-        print(f"Created {len(windows)} windows")  # Debug print
+        logger.info(f"Created {len(windows)} windows")
 
         # Set up progress tracking
         if progress:
@@ -357,7 +357,7 @@ async def translate_sliding_window(
         # Translate each window
         translated_windows = []
         for i, window in enumerate(windows):
-            print(f"Translating window {i + 1}: {window}")  # Debug print
+            logger.debug(f"Translating window {i + 1}: {window}")
             # Create translation request
             request = TranslationRequest(
                 source_lang=config.source_lang,
@@ -386,7 +386,7 @@ async def translate_sliding_window(
                 and config.checkpoint_dir
                 and (i + 1) % config.checkpoint_frequency == 0
             ):
-                print(f"Saving checkpoint after window {i + 1}")  # Debug print
+                logger.debug(f"Saving checkpoint after window {i + 1}")
                 state = TranslationState(
                     source_lang=config.source_lang,
                     target_lang=config.target_lang,
@@ -406,7 +406,7 @@ async def translate_sliding_window(
 
         # Merge windows
         final_text = merge_chunks(translated_windows, overlap_size)
-        print(f"Final merged text: {final_text}")  # Debug print
+        logger.debug(f"Final merged text: {final_text}")
 
         time_taken = (datetime.now() - start_time).total_seconds()
 
@@ -422,7 +422,7 @@ async def translate_sliding_window(
         )
 
     except Exception as e:
-        print(f"Error in sliding window translation: {str(e)}")  # Debug print
+        logger.error(f"Error in sliding window translation: {str(e)}")
         raise TranslationError(f"Translation failed: {str(e)}") from e
 
 
@@ -479,8 +479,8 @@ def create_windows(
     Returns:
         List of text windows
     """
-    print(f"Creating windows for text: {text}")  # Debug print
-    print(f"Window size: {window_size}, Overlap size: {overlap_size}")  # Debug print
+    logger.debug(f"Creating windows for text: {text}")
+    logger.debug(f"Window size: {window_size}, Overlap size: {overlap_size}")
 
     if not text:
         return []
@@ -501,7 +501,7 @@ def create_windows(
 
         # Extract window
         window = text[start:end]
-        print(f"Created window: {window}")  # Debug print
+        logger.debug(f"Created window: {window}")
         windows.append(window)
 
         # If we've reached the end, break
@@ -513,7 +513,7 @@ def create_windows(
         if start <= 0 or start >= end:
             break
 
-    print(f"Created {len(windows)} windows")  # Debug print
+    logger.debug(f"Created {len(windows)} windows")
     return windows
 
 
