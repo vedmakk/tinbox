@@ -9,9 +9,11 @@ import pytest
 from tinbox.core.translation.checkpoint import (
     CheckpointManager,
     TranslationState,
+    ResumeResult,
     load_checkpoint,
     save_checkpoint,
     should_resume,
+    resume_from_checkpoint,
 )
 from tinbox.core.types import ModelType, TranslationConfig
 
@@ -366,6 +368,297 @@ class TestErrorHandling:
         with patch("builtins.open", side_effect=IOError("Permission denied")):
             loaded_state = await manager.load()
             assert loaded_state is None
+
+
+class TestResumeFromCheckpoint:
+    """Test the resume_from_checkpoint utility function."""
+
+    async def test_resume_no_checkpoint_manager(self, sample_config):
+        """Test resume when no checkpoint manager is provided."""
+        result = await resume_from_checkpoint(None, sample_config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is False
+        assert result.translated_items == []
+        assert result.total_tokens == 0
+        assert result.total_cost == 0.0
+        assert result.metadata == {}
+
+    async def test_resume_disabled(self, sample_config):
+        """Test resume when resume_from_checkpoint is disabled."""
+        config = sample_config.model_copy(update={"resume_from_checkpoint": False})
+        manager = AsyncMock(spec=CheckpointManager)
+        
+        result = await resume_from_checkpoint(manager, config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is False
+        assert result.translated_items == []
+        assert result.total_tokens == 0
+        assert result.total_cost == 0.0
+        assert result.metadata == {}
+        
+        # Manager.load should not be called
+        manager.load.assert_not_called()
+
+    async def test_resume_no_checkpoint_found(self, sample_config):
+        """Test resume when no checkpoint file exists."""
+        manager = AsyncMock(spec=CheckpointManager)
+        manager.load.return_value = None
+        
+        result = await resume_from_checkpoint(manager, sample_config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is False
+        assert result.translated_items == []
+        assert result.total_tokens == 0
+        assert result.total_cost == 0.0
+        assert result.metadata == {}
+        
+        manager.load.assert_called_once()
+
+    async def test_resume_empty_checkpoint(self, sample_config):
+        """Test resume when checkpoint has no translated chunks."""
+        manager = AsyncMock(spec=CheckpointManager)
+        empty_state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="page",
+            completed_pages=[],
+            failed_pages=[],
+            translated_chunks={},  # Empty chunks
+            token_usage=0,
+            cost=0.0,
+            time_taken=0.0,
+        )
+        manager.load.return_value = empty_state
+        
+        result = await resume_from_checkpoint(manager, sample_config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is False
+        assert result.translated_items == []
+        assert result.total_tokens == 0
+        assert result.total_cost == 0.0
+        assert result.metadata == {}
+
+    async def test_resume_successful_page_algorithm(self, sample_config):
+        """Test successful resume for page-by-page algorithm."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="page",
+            completed_pages=[1, 2, 3],
+            failed_pages=[],
+            translated_chunks={
+                "1": "Translated page 1",
+                "2": "Translated page 2", 
+                "3": "Translated page 3",
+            },
+            token_usage=150,
+            cost=0.015,
+            time_taken=30.0,
+        )
+        manager.load.return_value = state
+        
+        config = sample_config.model_copy(update={"algorithm": "page"})
+        result = await resume_from_checkpoint(manager, config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        assert result.translated_items == ["Translated page 1", "Translated page 2", "Translated page 3"]
+        assert result.total_tokens == 150
+        assert result.total_cost == 0.015
+        assert result.metadata == {}  # No special metadata for page algorithm
+        
+        manager.load.assert_called_once()
+
+    async def test_resume_successful_sliding_window_algorithm(self, sample_config):
+        """Test successful resume for sliding window algorithm."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="sliding-window",
+            completed_pages=[1],
+            failed_pages=[],
+            translated_chunks={
+                "1": "Translated window 1",
+                "2": "Translated window 2",
+            },
+            token_usage=100,
+            cost=0.01,
+            time_taken=20.0,
+        )
+        manager.load.return_value = state
+        
+        config = sample_config.model_copy(update={"algorithm": "sliding-window"})
+        result = await resume_from_checkpoint(manager, config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        assert result.translated_items == ["Translated window 1", "Translated window 2"]
+        assert result.total_tokens == 100
+        assert result.total_cost == 0.01
+        assert result.metadata == {}  # No special metadata for sliding window
+
+    async def test_resume_successful_context_aware_algorithm(self, sample_config):
+        """Test successful resume for context-aware algorithm."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="context-aware",
+            completed_pages=[1],
+            failed_pages=[],
+            translated_chunks={
+                "1": "Translated chunk 1",
+                "2": "Translated chunk 2",
+            },
+            token_usage=200,
+            cost=0.02,
+            time_taken=40.0,
+        )
+        manager.load.return_value = state
+        
+        # Provide source chunks for context
+        source_chunks = ["Source chunk 1", "Source chunk 2", "Source chunk 3"]
+        
+        result = await resume_from_checkpoint(manager, sample_config, source_chunks)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        assert result.translated_items == ["Translated chunk 1", "Translated chunk 2"]
+        assert result.total_tokens == 200
+        assert result.total_cost == 0.02
+        
+        # Should have context metadata for continuing translation
+        assert "previous_chunk" in result.metadata
+        assert "previous_translation" in result.metadata
+        assert result.metadata["previous_chunk"] == "Source chunk 2"  # Last completed chunk (index 1)
+        assert result.metadata["previous_translation"] == "Translated chunk 2"
+
+    async def test_resume_context_aware_no_source_chunks(self, sample_config):
+        """Test context-aware resume when no source chunks are provided."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="context-aware",
+            completed_pages=[1],
+            failed_pages=[],
+            translated_chunks={
+                "1": "Translated chunk 1",
+                "2": "Translated chunk 2",
+            },
+            token_usage=200,
+            cost=0.02,
+            time_taken=40.0,
+        )
+        manager.load.return_value = state
+        
+        result = await resume_from_checkpoint(manager, sample_config)  # No chunks parameter
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        assert result.translated_items == ["Translated chunk 1", "Translated chunk 2"]
+        assert result.total_tokens == 200
+        assert result.total_cost == 0.02
+        assert result.metadata == {}  # No context metadata without source chunks
+
+    async def test_resume_context_aware_insufficient_chunks(self, sample_config):
+        """Test context-aware resume when there are not enough source chunks."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="context-aware",
+            completed_pages=[1],
+            failed_pages=[],
+            translated_chunks={
+                "1": "Translated chunk 1",
+                "2": "Translated chunk 2",
+                "3": "Translated chunk 3",
+            },
+            token_usage=300,
+            cost=0.03,
+            time_taken=60.0,
+        )
+        manager.load.return_value = state
+        
+        # Only provide 2 source chunks, but we have 3 translated chunks
+        source_chunks = ["Source chunk 1", "Source chunk 2"]
+        
+        result = await resume_from_checkpoint(manager, sample_config, source_chunks)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        assert result.translated_items == ["Translated chunk 1", "Translated chunk 2", "Translated chunk 3"]
+        assert result.total_tokens == 300
+        assert result.total_cost == 0.03
+        assert result.metadata == {}  # No context metadata when chunk index is out of range
+
+    async def test_resume_with_non_sequential_chunk_keys(self, sample_config):
+        """Test resume with non-sequential chunk keys in checkpoint."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="page",
+            completed_pages=[1, 3, 5],
+            failed_pages=[2, 4],
+            translated_chunks={
+                "1": "Translated page 1",
+                "3": "Translated page 3",
+                "5": "Translated page 5",
+                # Missing "2" and "4"
+            },
+            token_usage=150,
+            cost=0.015,
+            time_taken=30.0,
+        )
+        manager.load.return_value = state
+        
+        config = sample_config.model_copy(update={"algorithm": "page"})
+        result = await resume_from_checkpoint(manager, config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        # Should include chunks with keys that exist in the range 1 to len(chunks)
+        assert result.translated_items == ["Translated page 1", "Translated page 3"]  # "1" and "3" exist, "2" is missing
+        assert result.total_tokens == 150
+        assert result.total_cost == 0.015
+
+    async def test_resume_with_string_and_int_chunk_keys(self, sample_config):
+        """Test resume handles both string and integer keys correctly."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="page",
+            completed_pages=[1, 2, 3],
+            failed_pages=[],
+            translated_chunks={
+                1: "Translated page 1",  # Integer key
+                "2": "Translated page 2",  # String key
+                "3": "Translated page 3",  # String key
+            },
+            token_usage=150,
+            cost=0.015,
+            time_taken=30.0,
+        )
+        manager.load.return_value = state
+        
+        config = sample_config.model_copy(update={"algorithm": "page"})
+        result = await resume_from_checkpoint(manager, config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        # Should only find string keys since the lookup uses str(i)
+        assert result.translated_items == ["Translated page 2", "Translated page 3"]  # Only "2" and "3" found as strings
+        assert result.total_tokens == 150
+        assert result.total_cost == 0.015
 
 
 class TestEdgeCases:

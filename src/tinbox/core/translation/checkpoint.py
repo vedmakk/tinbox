@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple, Dict, Any
 
 from tinbox.core.types import TranslationConfig
 from tinbox.utils.logging import get_logger
@@ -25,6 +25,17 @@ class TranslationState:
     token_usage: int
     cost: float
     time_taken: float
+
+
+@dataclass
+class ResumeResult:
+    """Result of attempting to resume from checkpoint."""
+
+    resumed: bool
+    translated_items: List[str]
+    total_tokens: int
+    total_cost: float
+    metadata: Dict[str, Any]
 
 
 class CheckpointManager:
@@ -167,6 +178,7 @@ class CheckpointManager:
             self._logger.error(f"Failed to load checkpoint: {str(e)}")
             return None
 
+
     async def cleanup_old_checkpoints(self, input_file: Path) -> None:
         """Clean up old checkpoint files for the given input file.
 
@@ -213,6 +225,73 @@ def load_checkpoint(config: TranslationConfig) -> Optional[TranslationState]:
 
     manager = CheckpointManager(config)
     return manager.load()
+
+
+async def resume_from_checkpoint(
+    checkpoint_manager: Optional[CheckpointManager],
+    config: TranslationConfig,
+    chunks: Optional[List[str]] = None,
+) -> ResumeResult:
+    """Attempt to resume translation from checkpoint.
+    
+    Args:
+        checkpoint_manager: The checkpoint manager instance
+        config: Translation configuration
+        chunks: Optional list of source chunks for context-aware algorithm
+        
+    Returns:
+        ResumeResult with resume status and loaded data
+    """
+    if not checkpoint_manager or not config.resume_from_checkpoint:
+        return ResumeResult(
+            resumed=False,
+            translated_items=[],
+            total_tokens=0,
+            total_cost=0.0,
+            metadata={}
+        )
+        
+    logger.info("Checking for checkpoint")
+    checkpoint = await checkpoint_manager.load()
+    
+    if not checkpoint or not checkpoint.translated_chunks:
+        return ResumeResult(
+            resumed=False,
+            translated_items=[],
+            total_tokens=0,
+            total_cost=0.0,
+            metadata={}
+        )
+        
+    logger.info("Found valid checkpoint, resuming from saved state")
+    
+    # Load existing translated items in order
+    translated_items = [
+        checkpoint.translated_chunks[str(i)]
+        for i in range(1, len(checkpoint.translated_chunks) + 1)
+        if str(i) in checkpoint.translated_chunks
+    ]
+    
+    # Prepare algorithm-specific metadata
+    metadata = {}
+    
+    # For context-aware algorithm, set up context from the last completed chunk
+    if config.algorithm == "context-aware" and chunks and translated_items:
+        chunk_index = len(translated_items) - 1
+        if chunk_index < len(chunks):
+            metadata["previous_chunk"] = chunks[chunk_index]
+            metadata["previous_translation"] = translated_items[-1]
+    
+    result = ResumeResult(
+        resumed=True,
+        translated_items=translated_items,
+        total_tokens=checkpoint.token_usage,
+        total_cost=checkpoint.cost,
+        metadata=metadata
+    )
+    
+    logger.info(f"Resumed with {len(translated_items)} completed items")
+    return result
 
 
 async def save_checkpoint(
