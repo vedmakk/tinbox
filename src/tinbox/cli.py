@@ -320,6 +320,10 @@ def translate(
         handler = create_handler(output_format)
         handler.write(output, output_file)
 
+        # Clean up checkpoints after successful output
+        if checkpoint_manager:
+            asyncio.run(checkpoint_manager.cleanup_old_checkpoints(config.input_file))
+
         # Show final statistics (only for text output)
         if output_format == OutputFormat.TEXT:
             table = Table(title="Translation Statistics", show_header=False)

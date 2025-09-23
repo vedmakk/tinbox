@@ -268,10 +268,6 @@ async def translate_page_by_page(
 
         time_taken = (datetime.now() - start_time).total_seconds()
 
-        # Clean up checkpoints if successful
-        if checkpoint_manager:
-            await checkpoint_manager.cleanup_old_checkpoints(config.input_file)
-
         return TranslationResponse(
             text=final_text,
             tokens_used=total_tokens,
@@ -419,10 +415,6 @@ async def translate_sliding_window(
         logger.debug(f"Final merged text: {final_text}")
 
         time_taken = (datetime.now() - start_time).total_seconds()
-
-        # Clean up checkpoints if successful
-        if checkpoint_manager:
-            await checkpoint_manager.cleanup_old_checkpoints(config.input_file)
 
         return TranslationResponse(
             text=final_text,
@@ -905,10 +897,6 @@ async def translate_context_aware(
         logger.info(f"Final translated text length: {len(final_text)} characters")
 
         time_taken = (datetime.now() - start_time).total_seconds()
-
-        # Clean up checkpoints if successful
-        if checkpoint_manager:
-            await checkpoint_manager.cleanup_old_checkpoints(config.input_file)
 
         return TranslationResponse(
             text=final_text,

@@ -353,10 +353,7 @@ class TestTranslateContextAware:
         # Verify checkpoint was saved (at least once)
         assert mock_checkpoint_manager.save.call_count >= 1
 
-        # Verify cleanup was called
-        mock_checkpoint_manager.cleanup_old_checkpoints.assert_called_once_with(
-            context_aware_config.input_file
-        )
+        # Note: Cleanup is now handled in CLI after output file is written
 
     async def test_translate_resume_from_checkpoint(
         self, context_aware_config, mock_translator, mock_checkpoint_manager

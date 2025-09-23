@@ -126,10 +126,7 @@ async def test_translate_page_by_page_with_checkpointing(
     saved_states = [call[0][0] for call in mock_checkpoint_manager.save.call_args_list]
     assert len(saved_states[-1].completed_pages) == 3  # All pages completed
 
-    # Verify cleanup
-    mock_checkpoint_manager.cleanup_old_checkpoints.assert_called_once_with(
-        test_config.input_file,
-    )
+    # Note: Cleanup is now handled in CLI after output file is written
 
     # Verify final result
     assert result.text  # Result after seam repair
@@ -545,8 +542,7 @@ async def test_page_by_page_checkpoint_recovery():
     # Should save checkpoints for new translations
     assert checkpoint_manager.save.called
 
-    # Should clean up checkpoints when done
-    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()
+    # Note: Cleanup is now handled in CLI after output file is written
 
 
 async def test_sliding_window_checkpoint_recovery():
@@ -615,8 +611,7 @@ async def test_sliding_window_checkpoint_recovery():
     # Should save checkpoints for new translations
     assert checkpoint_manager.save.called
 
-    # Should clean up checkpoints when done
-    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()
+    # Note: Cleanup is now handled in CLI after output file is written
 
 
 async def test_context_aware_checkpoint_recovery():
@@ -699,8 +694,7 @@ async def test_context_aware_checkpoint_recovery():
     # Should save checkpoints for new translations
     assert checkpoint_manager.save.called
 
-    # Should clean up checkpoints when done
-    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()
+    # Note: Cleanup is now handled in CLI after output file is written
 
 
 async def test_no_checkpoint_available():
@@ -752,5 +746,4 @@ async def test_no_checkpoint_available():
     # Should save checkpoints during translation
     assert checkpoint_manager.save.called
 
-    # Should clean up checkpoints when done
-    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()
+    # Note: Cleanup is now handled in CLI after output file is written
