@@ -316,6 +316,148 @@ tinbox/
 └── tests/                        # Test suite
 ```
 
+## 🧪 Running Tests
+
+Here's how to run the tests:
+
+### Prerequisites
+
+Make sure you have the development dependencies installed:
+
+```bash
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Or if you're using the project locally
+pip install pytest pytest-asyncio pytest-cov
+```
+
+### Running All Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run tests with verbose output
+pytest -v
+
+# Run tests with coverage report
+pytest --cov=tinbox --cov-report=html
+```
+
+### Running Specific Test Categories
+
+```bash
+# Run only cost estimation tests
+pytest tests/test_core/test_cost.py -v
+
+# Run only CLI tests
+pytest tests/test_cli.py -v
+
+# Run all core functionality tests
+pytest tests/test_core/ -v
+
+# Run processor tests (PDF, DOCX, text)
+pytest tests/test_core/test_processors/ -v
+```
+
+### Running Tests Without Coverage
+
+If you encounter coverage-related issues, you can run tests without coverage:
+
+```bash
+pytest tests/ --override-ini="addopts=-ra -q"
+```
+
+### Test Structure
+
+The test suite is organized as follows:
+
+```
+tests/
+├── data/                     # Sample test documents
+│   ├── sample_ar.pdf        # Arabic PDF for testing
+│   └── sample_ar.docx       # Arabic DOCX for testing
+├── test_cli.py              # CLI interface tests
+├── test_core/               # Core functionality tests
+│   ├── test_cost.py         # Cost estimation tests
+│   ├── test_output.py       # Output formatting tests
+│   ├── test_progress.py     # Progress tracking tests
+│   ├── test_processors/     # Document processor tests
+│   │   ├── test_pdf_processor.py
+│   │   ├── test_text_processor.py
+│   │   └── test_word_processor.py
+│   └── test_translation/    # Translation algorithm tests
+│       ├── test_algorithms.py
+│       └── test_litellm.py
+└── test_utils/              # Utility function tests
+    └── test_language.py
+```
+
+### Key Test Areas
+
+1. **Cost Estimation** (`test_cost.py`)
+
+   - Token counting for different file types
+   - Input/output token cost calculations
+   - Cost threshold warnings
+   - Model pricing verification
+
+2. **Document Processing** (`test_processors/`)
+
+   - PDF text extraction and page handling
+   - DOCX word counting and text extraction
+   - Text file processing
+
+3. **CLI Interface** (`test_cli.py`)
+
+   - Command-line argument parsing
+   - Dry-run functionality
+   - Output formatting options
+   - Error handling
+
+4. **Translation Algorithms** (`test_translation/`)
+   - Page-by-page algorithm testing
+   - Sliding window algorithm testing
+   - Model interface testing
+
+### Continuous Integration
+
+The project uses pytest with the following configuration (in `pyproject.toml`):
+
+```toml
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --cov=tinbox"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+```
+
+### Writing New Tests
+
+When contributing new features, please:
+
+1. Add tests in the appropriate directory
+2. Follow the existing naming convention (`test_*.py`)
+3. Use descriptive test function names
+4. Include docstrings explaining what each test does
+5. Mock external dependencies (APIs, file system operations)
+
+Example test structure:
+
+```python
+def test_feature_name():
+    """Test description of what this test verifies."""
+    # Arrange
+    input_data = create_test_data()
+
+    # Act
+    result = function_under_test(input_data)
+
+    # Assert
+    assert result.expected_property == expected_value
+```
+
 ## 🔜 Future Plans
 
 1. **Enhanced Output Formats**
