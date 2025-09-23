@@ -8,7 +8,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
 from rich.table import Table
 
 from tinbox.core import (
@@ -246,6 +246,8 @@ def translate(
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
             console=console,
         ) as progress:
             # Run translation
