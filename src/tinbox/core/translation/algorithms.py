@@ -1,8 +1,9 @@
 """Translation algorithms for Tinbox."""
 
 import asyncio
+import re
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from rich.progress import Progress, TaskID
 
@@ -123,6 +124,14 @@ async def translate_document(
         )
     elif config.algorithm == "sliding-window":
         return await translate_sliding_window(
+            content,
+            config,
+            translator,
+            progress,
+            checkpoint_manager,
+        )
+    elif config.algorithm == "context-aware":
+        return await translate_context_aware(
             content,
             config,
             translator,
@@ -596,3 +605,293 @@ def update_page_with_seam(page: str, seam: str) -> str:
         return page[pos + len(seam) :]
 
     return page
+
+
+def smart_text_split(
+    text: str,
+    target_size: int,
+    custom_split_token: Optional[str] = None
+) -> List[str]:
+    """Split text at natural boundaries or custom tokens.
+
+    Priority order:
+    1. Custom split token (if provided) - ignores target_size
+    2. Paragraph breaks (\n\n)
+    3. Sentence endings ([.!?]\s+)
+    4. Line breaks (\n)
+    5. Clause boundaries ([;:,]\s+)
+    6. Word boundaries (\s+)
+
+    Args:
+        text: Input text to split
+        target_size: Target size for each chunk (characters)
+        custom_split_token: Optional custom token to split on (ignores target_size)
+
+    Returns:
+        List of text chunks
+
+    Raises:
+        ValueError: If target_size is not positive or text is empty
+    """
+    if not text:
+        return []
+    
+    if target_size <= 0:
+        raise ValueError("target_size must be positive")
+
+    # If custom split token is provided, split on it and ignore target_size
+    if custom_split_token:
+        chunks = text.split(custom_split_token)
+        # Remove empty chunks and strip whitespace
+        return [chunk.strip() for chunk in chunks if chunk.strip()]
+
+    # If text is smaller than target size, return as single chunk
+    if len(text) <= target_size:
+        return [text]
+
+    chunks = []
+    current_pos = 0
+
+    while current_pos < len(text):
+        # Calculate the end position for this chunk
+        end_pos = min(current_pos + target_size, len(text))
+        
+        # If we're at the end of the text, take the remaining text
+        if end_pos == len(text):
+            chunks.append(text[current_pos:end_pos])
+            break
+
+        # Try to find a good split point within the target size
+        chunk_text = text[current_pos:end_pos]
+        best_split_pos = len(chunk_text)  # Default to target size
+        
+        # Priority 1: Paragraph breaks (\n\n)
+        paragraph_matches = list(re.finditer(r'\n\n', chunk_text))
+        if paragraph_matches:
+            # Take the last paragraph break within the chunk
+            best_split_pos = paragraph_matches[-1].end()
+        else:
+            # Priority 2: Sentence endings ([.!?]\s+)
+            sentence_matches = list(re.finditer(r'[.!?]\s+', chunk_text))
+            if sentence_matches:
+                best_split_pos = sentence_matches[-1].end()
+            else:
+                # Priority 3: Line breaks (\n)
+                line_matches = list(re.finditer(r'\n', chunk_text))
+                if line_matches:
+                    best_split_pos = line_matches[-1].end()
+                else:
+                    # Priority 4: Clause boundaries ([;:,]\s+)
+                    clause_matches = list(re.finditer(r'[;:,]\s+', chunk_text))
+                    if clause_matches:
+                        best_split_pos = clause_matches[-1].end()
+                    else:
+                        # Priority 5: Word boundaries (\s+)
+                        word_matches = list(re.finditer(r'\s+', chunk_text))
+                        if word_matches:
+                            best_split_pos = word_matches[-1].end()
+                        # If no word boundaries found, split at target size (fallback)
+
+        # Extract the chunk up to the best split position
+        actual_end = current_pos + best_split_pos
+        chunk = text[current_pos:actual_end].strip()
+        
+        if chunk:  # Only add non-empty chunks
+            chunks.append(chunk)
+        
+        # Move to the next position
+        current_pos = actual_end
+        
+        # Ensure we make progress (avoid infinite loops)
+        if current_pos >= actual_end:
+            current_pos += 1
+
+    return chunks
+
+
+def build_translation_context(
+    source_lang: str,
+    target_lang: str,
+    current_chunk: str,
+    previous_chunk: Optional[str] = None,
+    previous_translation: Optional[str] = None,
+) -> str:
+    """Build translation context with previous chunk and translation for better consistency.
+
+    Args:
+        source_lang: Source language code
+        target_lang: Target language code  
+        current_chunk: Current chunk to translate
+        previous_chunk: Previous chunk (for context)
+        previous_translation: Previous translation (for consistency)
+
+    Returns:
+        Formatted translation prompt with context
+    """
+    context = f"Translate the following text from {source_lang} to {target_lang}.\n\n"
+
+    if previous_chunk and previous_translation:
+        context += f"[PREVIOUS_SOURCE]\n{previous_chunk}\n[/PREVIOUS_SOURCE]\n\n"
+        context += f"[PREVIOUS_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_TRANSLATION]\n\n"
+
+    context += f"[TRANSLATE_THIS]\n{current_chunk}\n[/TRANSLATE_THIS]\n\n"
+    context += "Only return the translation of the text between [TRANSLATE_THIS] tags. Do not include the tags or any other content."
+
+    return context
+
+
+async def translate_context_aware(
+    content: DocumentContent,
+    config: TranslationConfig,
+    translator: ModelInterface,
+    progress: Optional[Progress] = None,
+    checkpoint_manager: Optional[CheckpointManager] = None,
+) -> TranslationResponse:
+    """Translate using context-aware algorithm with natural boundary splitting.
+
+    Args:
+        content: The document content to translate
+        config: Translation configuration
+        translator: Model interface to use
+        progress: Optional progress bar
+        checkpoint_manager: Optional checkpoint manager for saving/loading state
+
+    Returns:
+        Translation result
+
+    Raises:
+        TranslationError: If translation fails
+    """
+    if isinstance(content.pages[0], bytes):
+        raise TranslationError(
+            "Context-aware algorithm not supported for image content"
+        )
+
+    start_time = datetime.now()
+    total_tokens = 0
+    total_cost = 0.0
+    task_id: Optional[TaskID] = None
+
+    try:
+        # Check for checkpoint
+        if checkpoint_manager and config.resume_from_checkpoint:
+            logger.info("Checking for checkpoint")
+            checkpoint = await checkpoint_manager.load()
+            if checkpoint and checkpoint.translated_chunks:
+                logger.info("Found valid checkpoint, resuming from saved state")
+                time_taken = (datetime.now() - start_time).total_seconds()
+                return TranslationResponse(
+                    text="".join(checkpoint.translated_chunks.values()),
+                    tokens_used=checkpoint.token_usage,
+                    cost=checkpoint.cost,
+                    time_taken=time_taken,
+                )
+
+        # Join all pages into single text
+        text = "\n\n".join(content.pages)
+        logger.info(f"Combined text length: {len(text)} characters")
+
+        # Use configured context size with fallback
+        context_size = config.context_size if config.context_size is not None else 2000
+        logger.info(f"Using context size: {context_size} characters")
+
+        # Split text using smart splitting
+        chunks = smart_text_split(
+            text,
+            context_size,
+            config.custom_split_token,
+        )
+        logger.info(f"Created {len(chunks)} chunks using context-aware splitting")
+
+        # Set up progress tracking
+        if progress:
+            task_id = progress.add_task(
+                "Translating chunks...",
+                total=len(chunks),
+            )
+
+        # Translate each chunk with context
+        translated_chunks = []
+        previous_chunk: Optional[str] = None
+        previous_translation: Optional[str] = None
+
+        for i, current_chunk in enumerate(chunks):
+            logger.debug(f"Translating chunk {i + 1}/{len(chunks)}")
+            
+            # Build context for this chunk
+            context_content = build_translation_context(
+                source_lang=config.source_lang,
+                target_lang=config.target_lang,
+                current_chunk=current_chunk,
+                previous_chunk=previous_chunk,
+                previous_translation=previous_translation,
+            )
+
+            # Create translation request
+            request = TranslationRequest(
+                source_lang=config.source_lang,
+                target_lang=config.target_lang,
+                content=context_content,
+                content_type="text/plain",
+                model=config.model,
+                model_params={"model_name": config.model_name}
+                if config.model_name
+                else {},
+            )
+
+            # Translate chunk
+            response = await translator.translate(request)
+            translated_chunks.append(response.text)
+            total_tokens += response.tokens_used
+            total_cost += response.cost
+
+            # Update progress
+            if progress and task_id is not None:
+                progress.update(task_id, advance=1)
+
+            # Save checkpoint if needed
+            if (
+                checkpoint_manager
+                and config.checkpoint_dir
+                and (i + 1) % config.checkpoint_frequency == 0
+            ):
+                logger.debug(f"Saving checkpoint after chunk {i + 1}")
+                state = TranslationState(
+                    source_lang=config.source_lang,
+                    target_lang=config.target_lang,
+                    algorithm="context-aware",
+                    completed_pages=[1],  # Context-aware treats the whole document as one page
+                    failed_pages=[],
+                    translated_chunks={
+                        j + 1: text for j, text in enumerate(translated_chunks)
+                    },
+                    token_usage=total_tokens,
+                    cost=total_cost,
+                    time_taken=(datetime.now() - start_time).total_seconds(),
+                )
+                await checkpoint_manager.save(state)
+
+            # Update context for next iteration
+            previous_chunk = current_chunk
+            previous_translation = response.text
+
+        # Direct concatenation (no complex merging needed)
+        final_text = "".join(translated_chunks)
+        logger.info(f"Final translated text length: {len(final_text)} characters")
+
+        time_taken = (datetime.now() - start_time).total_seconds()
+
+        # Clean up checkpoints if successful
+        if checkpoint_manager:
+            await checkpoint_manager.cleanup_old_checkpoints(config.input_file)
+
+        return TranslationResponse(
+            text=final_text,
+            tokens_used=total_tokens,
+            cost=total_cost,
+            time_taken=time_taken,
+        )
+
+    except Exception as e:
+        logger.error(f"Error in context-aware translation: {str(e)}")
+        raise TranslationError(f"Translation failed: {str(e)}") from e

@@ -111,10 +111,32 @@ class CostEstimate:
         self.cost_level = get_cost_level(estimated_cost)
 
 
+def estimate_context_aware_tokens(
+    estimated_tokens: int,
+    context_multiplier: float = 1.8
+) -> int:
+    """Estimate input tokens for context-aware translation.
+
+    Context-aware algorithm uses more input tokens due to:
+    - Previous chunk context
+    - Previous translation context
+    - Translation instructions
+
+    Args:
+        estimated_tokens: Base estimated tokens from document
+        context_multiplier: Multiplier to account for context overhead
+
+    Returns:
+        Estimated input tokens including context overhead
+    """
+    return int(estimated_tokens * context_multiplier)
+
+
 def estimate_cost(
     file_path: Path,
     model: ModelType,
     *,
+    algorithm: str = "page",
     max_cost: Optional[float] = None,
 ) -> CostEstimate:
     """Estimate the cost of translating a document.
@@ -122,6 +144,7 @@ def estimate_cost(
     Args:
         file_path: Path to the document
         model: Model to use for translation
+        algorithm: Translation algorithm to use
         max_cost: Optional maximum cost threshold
 
     Returns:
@@ -130,9 +153,17 @@ def estimate_cost(
     estimated_tokens = estimate_document_tokens(file_path)
     input_cost_per_1k, output_cost_per_1k = MODEL_COSTS.get(model, (0.0, 0.0))
     
-    # For translation, assume input and output tokens are roughly equal
-    input_cost = (estimated_tokens / 1000) * input_cost_per_1k
-    output_cost = (estimated_tokens / 1000) * output_cost_per_1k
+    # Calculate input tokens based on algorithm
+    if algorithm == "context-aware":
+        input_tokens = estimate_context_aware_tokens(estimated_tokens)
+        output_tokens = estimated_tokens  # Output tokens remain the same
+    else:
+        # For page and sliding-window algorithms, input and output tokens are roughly equal
+        input_tokens = estimated_tokens
+        output_tokens = estimated_tokens
+    
+    input_cost = (input_tokens / 1000) * input_cost_per_1k
+    output_cost = (output_tokens / 1000) * output_cost_per_1k
     estimated_cost = input_cost + output_cost
 
     # Estimate time (very rough estimate)
@@ -148,6 +179,14 @@ def estimate_cost(
             warnings.append(
                 f"Large document detected ({estimated_tokens:,} tokens). "
                 "Consider using Ollama for better performance and no cost."
+            )
+
+        if algorithm == "context-aware":
+            context_overhead = input_tokens - estimated_tokens
+            warnings.append(
+                f"Context-aware algorithm uses additional input tokens for context "
+                f"(+{context_overhead:,} tokens, ~80% overhead). "
+                f"This improves translation quality but increases cost."
             )
 
         if max_cost and estimated_cost > max_cost:

@@ -163,10 +163,20 @@ def translate(
         help="Model to use (e.g., 'openai:gpt-4o', 'anthropic:claude-3-sonnet', 'ollama:mistral-small').",
     ),
     algorithm: str = typer.Option(
-        "page",
+        "context-aware",
         "--algorithm",
         "-a",
-        help="Translation algorithm to use: 'page' or 'sliding-window'.",
+        help="Translation algorithm: 'page', 'sliding-window', or 'context-aware' (recommended).",
+    ),
+    context_size: Optional[int] = typer.Option(
+        2000,
+        "--context-size",
+        help="Target chunk size for context-aware algorithm (characters).",
+    ),
+    custom_split_token: Optional[str] = typer.Option(
+        None,
+        "--split-token",
+        help="Custom token to split text on (context-aware only).",
     ),
     dry_run: bool = typer.Option(
         False,
@@ -201,6 +211,7 @@ def translate(
         estimate = estimate_cost(
             input_file,
             model_type,
+            algorithm=algorithm,
             max_cost=max_cost,
         )
 
@@ -234,6 +245,8 @@ def translate(
             force=force,
             max_cost=max_cost,
             verbose=verbose,
+            context_size=context_size,
+            custom_split_token=custom_split_token,
         )
 
         # Load document

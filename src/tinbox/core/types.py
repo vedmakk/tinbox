@@ -34,7 +34,7 @@ class TranslationConfig(BaseModel):
     model_name: str = Field(
         description="Specific model name (e.g., 'gpt-4o' for OpenAI, 'claude-3-sonnet' for Anthropic)",
     )
-    algorithm: Literal["page", "sliding-window"]
+    algorithm: Literal["page", "sliding-window", "context-aware"]
     input_file: Path
     output_file: Optional[Path] = None
 
@@ -74,6 +74,17 @@ class TranslationConfig(BaseModel):
         default=200,
         gt=0,
         description="Overlap size for sliding window translation",
+    )
+
+    # Context-aware algorithm specific settings
+    context_size: Optional[int] = Field(
+        default=2000,
+        gt=0,
+        description="Target size for context-aware chunks (characters)",
+    )
+    custom_split_token: Optional[str] = Field(
+        default=None,
+        description="Custom token to split text on (context-aware only, ignores context_size)",
     )
 
     # Checkpoint settings

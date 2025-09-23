@@ -10,6 +10,8 @@ from tinbox.core.translation.algorithms import (
     create_windows,
     merge_chunks,
     repair_seams,
+    translate_context_aware,
+    translate_document,
     translate_page_by_page,
     translate_sliding_window,
 )
@@ -386,3 +388,91 @@ def test_merge_chunks():
     assert len(full_overlap_result) > 0
     assert "First chunk" in full_overlap_result
     assert "final content" in full_overlap_result
+
+
+async def test_translate_document_context_aware(
+    test_content,
+    mock_translator,
+    mock_checkpoint_manager,
+):
+    """Test translate_document function with context-aware algorithm."""
+    config = TranslationConfig(
+        source_lang="en",
+        target_lang="fr",
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
+        algorithm="context-aware",
+        input_file=Path("test.txt"),
+        context_size=50,
+        checkpoint_dir=Path("checkpoints"),
+        checkpoint_frequency=1,
+    )
+
+    # Mock translator to handle context-aware format
+    async def mock_context_translate(request, stream=False):
+        content = request.content
+        if "[TRANSLATE_THIS]" in content and "[/TRANSLATE_THIS]" in content:
+            start = content.find("[TRANSLATE_THIS]") + len("[TRANSLATE_THIS]")
+            end = content.find("[/TRANSLATE_THIS]")
+            actual_content = content[start:end].strip()
+            return TranslationResponse(
+                text=f"Translated: {actual_content}",
+                tokens_used=10,
+                cost=0.001,
+                time_taken=0.1,
+            )
+        return TranslationResponse(
+            text="Translated text",
+            tokens_used=10,
+            cost=0.001,
+            time_taken=0.1,
+        )
+
+    mock_translator.translate = AsyncMock(side_effect=mock_context_translate)
+
+    # Test the main translate_document function
+    result = await translate_document(
+        test_content,
+        config,
+        mock_translator,
+        checkpoint_manager=mock_checkpoint_manager,
+    )
+
+    # Verify the result
+    assert result.text
+    assert result.tokens_used > 0
+    assert result.cost > 0
+    assert result.time_taken >= 0
+
+    # Verify translator was called
+    assert mock_translator.translate.called
+
+
+async def test_translate_document_algorithm_routing():
+    """Test that translate_document routes to correct algorithm."""
+    mock_translator = AsyncMock(spec=ModelInterface)
+    mock_translator.translate.return_value = TranslationResponse(
+        text="Translated",
+        tokens_used=10,
+        cost=0.001,
+        time_taken=0.1,
+    )
+
+    content = DocumentContent(
+        pages=["Test content"],
+        content_type="text/plain",
+        metadata={},
+    )
+
+    # Test unknown algorithm
+    config = TranslationConfig(
+        source_lang="en",
+        target_lang="fr",
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
+        algorithm="unknown-algorithm",
+        input_file=Path("test.txt"),
+    )
+
+    with pytest.raises(TranslationError, match="Unknown algorithm: unknown-algorithm"):
+        await translate_document(content, config, mock_translator)

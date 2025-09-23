@@ -44,9 +44,10 @@ tinbox translate --to es document.pdf
    - Tinbox's algorithms work around these limitations intelligently
 
 4. **Quality and Consistency**
-   - Smart algorithms ensure consistent translations across document sections
+   - **Context-Aware Algorithm**: Provides translation context from previous chunks for better consistency
+   - Smart text splitting at natural boundaries (paragraphs, sentences, clauses)
+   - No duplicate content issues (eliminates overlapping translation problems)
    - Maintains context between pages and segments
-   - Repairs potential inconsistencies at section boundaries
 
 ![Tinbox Workflow](link_to_diagram.png)
 
@@ -68,8 +69,9 @@ tinbox translate --to es document.pdf
 ### 🧠 Intelligent Translation
 
 - **Smart Algorithms**:
-  - Page-by-Page with Seam Repair (default for PDF)
-  - Sliding Window for long text documents
+  - **Context-Aware** (recommended default): Smart text splitting with translation context
+  - **Page-by-Page** with Seam Repair: Best for PDFs
+  - **Sliding Window**: For long text documents
   - Automatic context preservation between sections
 
 ### 🤖 Flexible Model Support
@@ -139,10 +141,10 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
    tinbox translate --from zh --to en document.docx
    ```
 
-3. **Handle a large text file with custom settings**
+3. **Handle a large text file with context-aware algorithm**
 
    ```bash
-   tinbox translate --to fr --algorithm sliding-window large_document.txt
+   tinbox translate --to fr --context-size 1500 large_document.txt
    ```
 
 4. **Using OpenAI models**
@@ -158,17 +160,23 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
 
 ### 💡 Tips for Best Results
 
-1. **For Large Documents**
+1. **For Most Documents**
 
-   - Use the sliding window algorithm: `--algorithm sliding-window`
-   - Adjust window size if needed: `--window-size 3000`
+   - Use the context-aware algorithm (default): `--algorithm context-aware`
+   - Adjust chunk size if needed: `--context-size 2000`
+   - Use custom split tokens for structured documents: `--split-token "|||"`
 
-2. **For PDFs**
+2. **For Large Documents**
 
-   - The default page-by-page algorithm works best
+   - Context-aware algorithm handles large documents intelligently
+   - Alternative: Use sliding window: `--algorithm sliding-window`
+
+3. **For PDFs**
+
+   - Page-by-page algorithm works best for PDFs: `--algorithm page`
    - No OCR needed - just point to your PDF!
 
-3. **For Best Performance**
+4. **For Best Performance**
    - Use local models via Ollama for no API costs
    - Cloud models (OpenAI, Anthropic, Google) for highest quality and faster processing
 
@@ -187,11 +195,13 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
 
 #### Algorithm Options
 
-| Option            | Description                                        | Default        |
-| ----------------- | -------------------------------------------------- | -------------- |
-| `--algorithm, -a` | Translation algorithm (`page` or `sliding-window`) | `page` for PDF |
-| `--window-size`   | Size of translation window                         | 2000 tokens    |
-| `--overlap-size`  | Overlap between windows                            | 200 tokens     |
+| Option            | Description                                                       | Default         |
+| ----------------- | ----------------------------------------------------------------- | --------------- |
+| `--algorithm, -a` | Translation algorithm (`context-aware`, `page`, `sliding-window`) | `context-aware` |
+| `--context-size`  | Target chunk size for context-aware algorithm (characters)        | 2000            |
+| `--split-token`   | Custom token to split text on (context-aware only)                | None            |
+| `--window-size`   | Size of translation window (sliding-window only)                  | 2000 tokens     |
+| `--overlap-size`  | Overlap between windows (sliding-window only)                     | 200 tokens      |
 
 #### Output Format Options
 
@@ -259,21 +269,35 @@ tinbox translate --to es --format markdown document.pdf
 
 ### Advanced Usage
 
-1. **Handling Very Large Documents**
+1. **Context-Aware Algorithm (Recommended)**
 
    ```bash
+   # Use default context-aware with custom chunk size
+   tinbox translate --to es --context-size 1500 document.txt
+
+   # Split text on custom tokens (great for structured documents)
+   tinbox translate --to fr --split-token "---" structured_document.txt
+   ```
+
+2. **Handling Very Large Documents**
+
+   ```bash
+   # Context-aware handles large documents intelligently (recommended)
+   tinbox translate --to es --context-size 3000 large_document.txt
+
+   # Alternative: sliding window algorithm
    tinbox translate --to es --algorithm sliding-window \
           --window-size 3000 --overlap-size 300 \
           large_document.pdf
    ```
 
-2. **Using Local Models**
+3. **Using Local Models**
 
    ```bash
    tinbox translate --to fr --model ollama:mistral-small document.txt
    ```
 
-3. **Cost Control and Dry Runs**
+4. **Cost Control and Dry Runs**
 
    ```bash
    # Check costs before translating
@@ -283,7 +307,7 @@ tinbox translate --to es --format markdown document.pdf
    tinbox translate --to de --max-cost 5.00 --model openai:gpt-4o document.pdf
    ```
 
-4. **Different Model Providers**
+5. **Different Model Providers**
 
    ```bash
    # OpenAI GPT-4
@@ -296,7 +320,7 @@ tinbox translate --to es --format markdown document.pdf
    tinbox translate --to es --model gemini:gemini-pro document.pdf
    ```
 
-5. **Benchmarking Different Models**
+6. **Benchmarking Different Models**
    ```bash
    tinbox translate --to de --benchmark --model openai:gpt-4o document.pdf
    ```
@@ -359,6 +383,9 @@ pytest tests/test_core/ -v
 
 # Run processor tests (PDF, DOCX, text)
 pytest tests/test_core/test_processors/ -v
+
+# Run context-aware algorithm tests
+pytest tests/test_core/test_translation/test_context_aware.py -v
 ```
 
 ### Running Tests Without Coverage
@@ -389,6 +416,7 @@ tests/
 │   │   └── test_word_processor.py
 │   └── test_translation/    # Translation algorithm tests
 │       ├── test_algorithms.py
+│       ├── test_context_aware.py  # Context-aware algorithm tests
 │       └── test_litellm.py
 └── test_utils/              # Utility function tests
     └── test_language.py
@@ -417,6 +445,7 @@ tests/
    - Error handling
 
 4. **Translation Algorithms** (`test_translation/`)
+   - Context-aware algorithm testing (smart splitting, context building)
    - Page-by-page algorithm testing
    - Sliding window algorithm testing
    - Model interface testing

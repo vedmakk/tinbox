@@ -8,6 +8,7 @@ import pytest
 from tinbox.core.cost import (
     CostEstimate,
     CostLevel,
+    estimate_context_aware_tokens,
     estimate_cost,
     estimate_document_tokens,
     get_cost_level,
@@ -143,3 +144,82 @@ def test_ollama_suggestion():
             "Consider using Ollama for better performance and no cost" in warning
             for warning in estimate.warnings
         )
+
+
+def test_estimate_context_aware_tokens():
+    """Test context-aware token estimation."""
+    base_tokens = 1000
+    
+    # Test with default multiplier (1.8)
+    result = estimate_context_aware_tokens(base_tokens)
+    assert result == 1800
+    
+    # Test with custom multiplier
+    result = estimate_context_aware_tokens(base_tokens, context_multiplier=2.0)
+    assert result == 2000
+    
+    # Test with fractional tokens
+    result = estimate_context_aware_tokens(1500, context_multiplier=1.5)
+    assert result == 2250
+
+
+@pytest.mark.parametrize(
+    "algorithm,expected_input_tokens,expected_output_tokens",
+    [
+        ("page", 1000, 1000),
+        ("sliding-window", 1000, 1000),
+        ("context-aware", 1800, 1000),  # 1.8x input tokens for context overhead
+    ],
+)
+def test_estimate_cost_by_algorithm(tmp_path, algorithm, expected_input_tokens, expected_output_tokens):
+    """Test cost estimation for different algorithms."""
+    file_path = tmp_path / "test.txt"
+    file_path.write_text("Test content")
+    
+    base_tokens = 1000
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=base_tokens):
+        estimate = estimate_cost(file_path, ModelType.OPENAI, algorithm=algorithm)
+        
+        # For OpenAI: input $0.00125/1K, output $0.01/1K
+        expected_input_cost = (expected_input_tokens / 1000) * 0.00125
+        expected_output_cost = (expected_output_tokens / 1000) * 0.01
+        expected_total_cost = expected_input_cost + expected_output_cost
+        
+        assert abs(estimate.estimated_cost - expected_total_cost) < 0.001
+        assert estimate.estimated_tokens == base_tokens  # Base tokens remain the same
+
+
+def test_context_aware_cost_warning():
+    """Test context-aware algorithm cost warning."""
+    file_path = Path("test.txt")
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=1000):
+        estimate = estimate_cost(file_path, ModelType.OPENAI, algorithm="context-aware")
+        
+        # Should have context overhead warning
+        context_warnings = [
+            warning for warning in estimate.warnings
+            if "Context-aware algorithm uses additional input tokens" in warning
+        ]
+        assert len(context_warnings) == 1
+        
+        # Should mention the overhead amount
+        warning = context_warnings[0]
+        assert "+800 tokens" in warning  # 1800 - 1000 = 800
+        assert "~80% overhead" in warning
+
+
+def test_context_aware_no_warning_for_ollama():
+    """Test that context-aware algorithm doesn't warn for Ollama."""
+    file_path = Path("test.txt")
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=1000):
+        estimate = estimate_cost(file_path, ModelType.OLLAMA, algorithm="context-aware")
+        
+        # Should not have context overhead warning for free models
+        context_warnings = [
+            warning for warning in estimate.warnings
+            if "Context-aware algorithm uses additional input tokens" in warning
+        ]
+        assert len(context_warnings) == 0

@@ -153,6 +153,52 @@ def test_translate_dry_run(cli_runner, mock_cost_estimate):
         test_file.unlink()
 
 
+def test_cli_context_aware_default(cli_runner, tmp_path):
+    """Test that context-aware is the default algorithm."""
+    input_file = tmp_path / "test.txt"
+    input_file.write_text("Test content")
+    
+    with patch("tinbox.cli.estimate_cost") as mock_estimate, \
+         patch("tinbox.cli.load_document") as mock_load, \
+         patch("tinbox.cli.create_translator") as mock_translator, \
+         patch("tinbox.cli.translate_document") as mock_translate, \
+         patch("tinbox.cli.console"):
+        
+        # Setup mocks
+        mock_estimate.return_value = CostEstimate(
+            estimated_tokens=100,
+            estimated_cost=0.01,
+            estimated_time=10.0,
+            warnings=[]
+        )
+        mock_load.return_value = DocumentContent(
+            pages=["Test content"],
+            content_type="text/plain",
+            metadata={}
+        )
+        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+            text="Translated text",
+            tokens_used=100,
+            cost=0.01,
+            time_taken=5.0
+        ))
+        
+        # Don't specify algorithm - should default to context-aware
+        result = cli_runner.invoke(app, [
+            "translate",
+            str(input_file),
+            "--model", "openai:gpt-4o",
+            "--force",
+        ])
+        
+        assert result.exit_code == 0
+        
+        # Verify default algorithm is context-aware
+        mock_estimate.assert_called_once()
+        call_args = mock_estimate.call_args
+        assert call_args.kwargs["algorithm"] == "context-aware"
+
+
 def test_translate_with_warnings(cli_runner):
     """Test translation with cost warnings."""
     test_file = Path("test.txt")
@@ -187,6 +233,52 @@ def test_translate_with_warnings(cli_runner):
 
     finally:
         test_file.unlink()
+
+
+def test_cli_context_aware_default(cli_runner, tmp_path):
+    """Test that context-aware is the default algorithm."""
+    input_file = tmp_path / "test.txt"
+    input_file.write_text("Test content")
+    
+    with patch("tinbox.cli.estimate_cost") as mock_estimate, \
+         patch("tinbox.cli.load_document") as mock_load, \
+         patch("tinbox.cli.create_translator") as mock_translator, \
+         patch("tinbox.cli.translate_document") as mock_translate, \
+         patch("tinbox.cli.console"):
+        
+        # Setup mocks
+        mock_estimate.return_value = CostEstimate(
+            estimated_tokens=100,
+            estimated_cost=0.01,
+            estimated_time=10.0,
+            warnings=[]
+        )
+        mock_load.return_value = DocumentContent(
+            pages=["Test content"],
+            content_type="text/plain",
+            metadata={}
+        )
+        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+            text="Translated text",
+            tokens_used=100,
+            cost=0.01,
+            time_taken=5.0
+        ))
+        
+        # Don't specify algorithm - should default to context-aware
+        result = cli_runner.invoke(app, [
+            "translate",
+            str(input_file),
+            "--model", "openai:gpt-4o",
+            "--force",
+        ])
+        
+        assert result.exit_code == 0
+        
+        # Verify default algorithm is context-aware
+        mock_estimate.assert_called_once()
+        call_args = mock_estimate.call_args
+        assert call_args.kwargs["algorithm"] == "context-aware"
 
 
 def test_translate_with_output_file(
@@ -295,6 +387,52 @@ def test_translate_verbose_mode(
         test_file.unlink()
 
 
+def test_cli_context_aware_default(cli_runner, tmp_path):
+    """Test that context-aware is the default algorithm."""
+    input_file = tmp_path / "test.txt"
+    input_file.write_text("Test content")
+    
+    with patch("tinbox.cli.estimate_cost") as mock_estimate, \
+         patch("tinbox.cli.load_document") as mock_load, \
+         patch("tinbox.cli.create_translator") as mock_translator, \
+         patch("tinbox.cli.translate_document") as mock_translate, \
+         patch("tinbox.cli.console"):
+        
+        # Setup mocks
+        mock_estimate.return_value = CostEstimate(
+            estimated_tokens=100,
+            estimated_cost=0.01,
+            estimated_time=10.0,
+            warnings=[]
+        )
+        mock_load.return_value = DocumentContent(
+            pages=["Test content"],
+            content_type="text/plain",
+            metadata={}
+        )
+        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+            text="Translated text",
+            tokens_used=100,
+            cost=0.01,
+            time_taken=5.0
+        ))
+        
+        # Don't specify algorithm - should default to context-aware
+        result = cli_runner.invoke(app, [
+            "translate",
+            str(input_file),
+            "--model", "openai:gpt-4o",
+            "--force",
+        ])
+        
+        assert result.exit_code == 0
+        
+        # Verify default algorithm is context-aware
+        mock_estimate.assert_called_once()
+        call_args = mock_estimate.call_args
+        assert call_args.kwargs["algorithm"] == "context-aware"
+
+
 def test_translate_force_mode(
     cli_runner,
     mock_cost_estimate,
@@ -338,6 +476,52 @@ def test_translate_force_mode(
         test_file.unlink()
 
 
+def test_cli_context_aware_default(cli_runner, tmp_path):
+    """Test that context-aware is the default algorithm."""
+    input_file = tmp_path / "test.txt"
+    input_file.write_text("Test content")
+    
+    with patch("tinbox.cli.estimate_cost") as mock_estimate, \
+         patch("tinbox.cli.load_document") as mock_load, \
+         patch("tinbox.cli.create_translator") as mock_translator, \
+         patch("tinbox.cli.translate_document") as mock_translate, \
+         patch("tinbox.cli.console"):
+        
+        # Setup mocks
+        mock_estimate.return_value = CostEstimate(
+            estimated_tokens=100,
+            estimated_cost=0.01,
+            estimated_time=10.0,
+            warnings=[]
+        )
+        mock_load.return_value = DocumentContent(
+            pages=["Test content"],
+            content_type="text/plain",
+            metadata={}
+        )
+        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+            text="Translated text",
+            tokens_used=100,
+            cost=0.01,
+            time_taken=5.0
+        ))
+        
+        # Don't specify algorithm - should default to context-aware
+        result = cli_runner.invoke(app, [
+            "translate",
+            str(input_file),
+            "--model", "openai:gpt-4o",
+            "--force",
+        ])
+        
+        assert result.exit_code == 0
+        
+        # Verify default algorithm is context-aware
+        mock_estimate.assert_called_once()
+        call_args = mock_estimate.call_args
+        assert call_args.kwargs["algorithm"] == "context-aware"
+
+
 def test_translate_max_cost(cli_runner):
     """Test translation with max cost threshold."""
     test_file = Path("test.txt")
@@ -376,3 +560,49 @@ def test_translate_max_cost(cli_runner):
 
     finally:
         test_file.unlink()
+
+
+def test_cli_context_aware_default(cli_runner, tmp_path):
+    """Test that context-aware is the default algorithm."""
+    input_file = tmp_path / "test.txt"
+    input_file.write_text("Test content")
+    
+    with patch("tinbox.cli.estimate_cost") as mock_estimate, \
+         patch("tinbox.cli.load_document") as mock_load, \
+         patch("tinbox.cli.create_translator") as mock_translator, \
+         patch("tinbox.cli.translate_document") as mock_translate, \
+         patch("tinbox.cli.console"):
+        
+        # Setup mocks
+        mock_estimate.return_value = CostEstimate(
+            estimated_tokens=100,
+            estimated_cost=0.01,
+            estimated_time=10.0,
+            warnings=[]
+        )
+        mock_load.return_value = DocumentContent(
+            pages=["Test content"],
+            content_type="text/plain",
+            metadata={}
+        )
+        mock_translate.return_value = AsyncMock(return_value=MagicMock(
+            text="Translated text",
+            tokens_used=100,
+            cost=0.01,
+            time_taken=5.0
+        ))
+        
+        # Don't specify algorithm - should default to context-aware
+        result = cli_runner.invoke(app, [
+            "translate",
+            str(input_file),
+            "--model", "openai:gpt-4o",
+            "--force",
+        ])
+        
+        assert result.exit_code == 0
+        
+        # Verify default algorithm is context-aware
+        mock_estimate.assert_called_once()
+        call_args = mock_estimate.call_args
+        assert call_args.kwargs["algorithm"] == "context-aware"
