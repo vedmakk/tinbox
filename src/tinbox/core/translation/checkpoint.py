@@ -132,13 +132,23 @@ class CheckpointManager:
                 )
                 return None
 
+            # Convert string keys back to integers for translated_chunks
+            translated_chunks = {}
+            for key, value in data["translated_chunks"].items():
+                try:
+                    # Try to convert key to int, keep as string if it fails
+                    int_key = int(key)
+                    translated_chunks[int_key] = value
+                except (ValueError, TypeError):
+                    translated_chunks[key] = value
+
             state = TranslationState(
                 source_lang=data["source_lang"],
                 target_lang=data["target_lang"],
                 algorithm=data["algorithm"],
                 completed_pages=data["completed_pages"],
                 failed_pages=data["failed_pages"],
-                translated_chunks=data["translated_chunks"],
+                translated_chunks=translated_chunks,
                 token_usage=data["token_usage"],
                 cost=data["cost"],
                 time_taken=data["time_taken"],
@@ -156,6 +166,21 @@ class CheckpointManager:
         except Exception as e:
             self._logger.error(f"Failed to load checkpoint: {str(e)}")
             return None
+
+    async def cleanup_old_checkpoints(self, input_file: Path) -> None:
+        """Clean up old checkpoint files for the given input file.
+
+        Args:
+            input_file: The input file to clean up checkpoints for
+        """
+        try:
+            checkpoint_path = self._get_checkpoint_path()
+            if checkpoint_path.exists():
+                checkpoint_path.unlink()
+                self._logger.debug(f"Cleaned up checkpoint file: {checkpoint_path}")
+        except Exception as e:
+            self._logger.error(f"Failed to clean up checkpoint: {str(e)}")
+            # Don't raise - cleanup failure shouldn't stop the translation
 
 
 def should_resume(config: TranslationConfig) -> bool:
