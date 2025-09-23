@@ -76,7 +76,7 @@ def test_estimate_document_tokens(tmp_path, file_type, content, expected_tokens)
         (
             ModelType.OPENAI,
             100_000,
-            3.0,  # 100K tokens * $0.03 per 1K tokens
+            1.125,  # 100K tokens * ($0.00125 input + $0.01 output) per 1K tokens = 100 * 0.01125 = 1.125
             [
                 "Large document detected (100,000 tokens). Consider using Ollama for better performance and no cost."
             ],
@@ -84,7 +84,7 @@ def test_estimate_document_tokens(tmp_path, file_type, content, expected_tokens)
         (
             ModelType.ANTHROPIC,
             25_000,
-            0.075,  # 25K tokens * $0.003 per 1K tokens
+            0.45,  # 25K tokens * ($0.003 input + $0.015 output) per 1K tokens = 25 * 0.018 = 0.45
             [],
         ),
         (
@@ -127,7 +127,7 @@ def test_cost_threshold_warning():
             max_cost=max_cost,
         )
         assert any(
-            f"Estimated cost ($3.00) exceeds maximum threshold (${max_cost:.2f})"
+            f"Estimated cost ($1.12) exceeds maximum threshold (${max_cost:.2f})"
             in warning
             for warning in estimate.warnings
         )

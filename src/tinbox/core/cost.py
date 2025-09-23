@@ -16,11 +16,13 @@ class CostLevel(str, Enum):
     VERY_HIGH = "very_high"  # > $20
 
 
-# Approximate costs per 1K tokens (as of March 2024)
-MODEL_COSTS: Dict[ModelType, float] = {
-    ModelType.OPENAI: 0.03,  # $0.03 per 1K input tokens, $0.06 per 1K output tokens
-    ModelType.ANTHROPIC: 0.003,  # $0.003 per 1K input tokens, $0.015 per 1K output tokens
-    ModelType.OLLAMA: 0.0,  # Free for local models
+# Approximate costs per 1K tokens (as of September 2025)
+# Format: (input_cost_per_1k, output_cost_per_1k)
+MODEL_COSTS: Dict[ModelType, tuple[float, float]] = {
+    ModelType.OPENAI: (0.00125, 0.01),  # $0.00125 per 1K input tokens, $0.01 per 1K output tokens (GPT-5)
+    ModelType.ANTHROPIC: (0.003, 0.015),  # $0.003 per 1K input tokens, $0.015 per 1K output tokens (Sonnet 4)
+    ModelType.GEMINI: (0.00125, 0.01),  # $0.00125 per 1K input tokens, $0.01 per 1K output tokens (Gemini 2.5 Pro)
+    ModelType.OLLAMA: (0.0, 0.0),  # Free for local models
 }
 
 
@@ -126,8 +128,12 @@ def estimate_cost(
         CostEstimate object with token count, cost, and warnings
     """
     estimated_tokens = estimate_document_tokens(file_path)
-    cost_per_1k = MODEL_COSTS.get(model, 0.0)
-    estimated_cost = (estimated_tokens / 1000) * cost_per_1k
+    input_cost_per_1k, output_cost_per_1k = MODEL_COSTS.get(model, (0.0, 0.0))
+    
+    # For translation, assume input and output tokens are roughly equal
+    input_cost = (estimated_tokens / 1000) * input_cost_per_1k
+    output_cost = (estimated_tokens / 1000) * output_cost_per_1k
+    estimated_cost = input_cost + output_cost
 
     # Estimate time (very rough estimate)
     # Assume 5 tokens/second for cloud models, 20 tokens/second for local
