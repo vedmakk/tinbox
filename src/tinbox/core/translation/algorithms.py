@@ -642,8 +642,8 @@ def smart_text_split(
     # If custom split token is provided, split on it and ignore target_size
     if custom_split_token:
         chunks = text.split(custom_split_token)
-        # Remove empty chunks and strip whitespace
-        return [chunk.strip() for chunk in chunks if chunk.strip()]
+        # Remove empty chunks
+        return [chunk for chunk in chunks if chunk]
 
     # If text is smaller than target size, return as single chunk
     if len(text) <= target_size:
@@ -694,7 +694,7 @@ def smart_text_split(
 
         # Extract the chunk up to the best split position
         actual_end = current_pos + best_split_pos
-        chunk = text[current_pos:actual_end].strip()
+        chunk = text[current_pos:actual_end]
         
         if chunk:  # Only add non-empty chunks
             chunks.append(chunk)
@@ -703,6 +703,7 @@ def smart_text_split(
         current_pos = actual_end
         
         # Ensure we make progress (avoid infinite loops)
+        # TODO: Is this needed?
         if current_pos >= actual_end:
             current_pos += 1
 
@@ -801,6 +802,7 @@ async def translate_context_aware(
             context_size,
             config.custom_split_token,
         )
+        logger.debug(f"Chunks: {chunks}")
         logger.info(f"Created {len(chunks)} chunks using context-aware splitting")
 
         # Set up progress tracking

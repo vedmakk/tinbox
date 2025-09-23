@@ -112,7 +112,7 @@ class LiteLLMTranslator(ModelInterface):
                 "content": (
                     f"You are a professional translator. Translate the following content "
                     f"from {request.source_lang} to {request.target_lang}. "
-                    f"Maintain the original formatting and structure. "
+                    f"Maintain the original formatting and structure (including whitespaces, line breaks, and any prefixing or suffixing spaces). "
                     f"Translate only the content, do not add any explanations or notes. "
                     f"Do not add any commentary or notes to the translation. It is extremely "
                     f"important that the only output you give is the translation of the content."
@@ -207,11 +207,21 @@ class LiteLLMTranslator(ModelInterface):
         start_time = datetime.now()
 
         try:
-            # Validate content is not empty
+            # Handle empty content - return as-is since there's nothing to translate
             if not request.content or (
                 isinstance(request.content, str) and not request.content.strip()
             ):
-                raise TranslationError("Translation failed: Empty content")
+                logger.info("Empty content, returning as-is")
+
+                end_time = datetime.now()
+                time_taken = (end_time - start_time).total_seconds()
+                
+                return TranslationResponse(
+                    text=request.content if isinstance(request.content, str) else "",
+                    tokens_used=0,
+                    cost=0.0,
+                    time_taken=time_taken,
+                )
 
             # Validate language codes (2 or 3 letter codes, or 'auto' for source)
             if request.source_lang != "auto" and (not request.source_lang.isalpha() or len(request.source_lang) not in [
@@ -301,6 +311,10 @@ class LiteLLMTranslator(ModelInterface):
                         raise TranslationError("Invalid response format")
 
                     text = response.choices[0].message.content
+
+                    if not text or not text.strip():
+                        raise TranslationError("No content returned from model")
+
                     # Get actual token usage from LiteLLM response
                     tokens = getattr(response.usage, "total_tokens", 0)
                     
