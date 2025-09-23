@@ -178,6 +178,7 @@ class LiteLLMTranslator(ModelInterface):
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 stream=stream,
+                drop_params=True,
                 **{k: v for k, v in request.model_params.items() if k != "model_name"},
             )
         except RateLimitError as e:
