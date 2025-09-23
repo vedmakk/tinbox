@@ -263,13 +263,15 @@ async def resume_from_checkpoint(
             metadata={}
         )
         
+    logger.debug("Found valid checkpoint, resuming from saved state", checkpoint=checkpoint)
     logger.info("Found valid checkpoint, resuming from saved state")
     
     # Load existing translated items in order
+    # Checkpoint loading always converts string keys to integer keys
     translated_items = [
-        checkpoint.translated_chunks[str(i)]
+        checkpoint.translated_chunks[i]
         for i in range(1, len(checkpoint.translated_chunks) + 1)
-        if str(i) in checkpoint.translated_chunks
+        if i in checkpoint.translated_chunks
     ]
     
     # Prepare algorithm-specific metadata

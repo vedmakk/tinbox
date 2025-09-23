@@ -366,7 +366,7 @@ class TestTranslateContextAware:
             algorithm="context-aware",
             completed_pages=[1],
             failed_pages=[],
-            translated_chunks={"1": "Previously translated chunk 1"},
+            translated_chunks={1: "Previously translated chunk 1"},
             token_usage=50,
             cost=0.05,
             time_taken=5.0,

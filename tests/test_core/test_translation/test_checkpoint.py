@@ -452,9 +452,9 @@ class TestResumeFromCheckpoint:
             completed_pages=[1, 2, 3],
             failed_pages=[],
             translated_chunks={
-                "1": "Translated page 1",
-                "2": "Translated page 2", 
-                "3": "Translated page 3",
+                1: "Translated page 1",
+                2: "Translated page 2",
+                3: "Translated page 3",
             },
             token_usage=150,
             cost=0.015,
@@ -484,8 +484,8 @@ class TestResumeFromCheckpoint:
             completed_pages=[1],
             failed_pages=[],
             translated_chunks={
-                "1": "Translated window 1",
-                "2": "Translated window 2",
+                1: "Translated window 1",
+                2: "Translated window 2",
             },
             token_usage=100,
             cost=0.01,
@@ -513,8 +513,8 @@ class TestResumeFromCheckpoint:
             completed_pages=[1],
             failed_pages=[],
             translated_chunks={
-                "1": "Translated chunk 1",
-                "2": "Translated chunk 2",
+                1: "Translated chunk 1",
+                2: "Translated chunk 2",
             },
             token_usage=200,
             cost=0.02,
@@ -549,8 +549,8 @@ class TestResumeFromCheckpoint:
             completed_pages=[1],
             failed_pages=[],
             translated_chunks={
-                "1": "Translated chunk 1",
-                "2": "Translated chunk 2",
+                1: "Translated chunk 1",
+                2: "Translated chunk 2",
             },
             token_usage=200,
             cost=0.02,
@@ -577,9 +577,9 @@ class TestResumeFromCheckpoint:
             completed_pages=[1],
             failed_pages=[],
             translated_chunks={
-                "1": "Translated chunk 1",
-                "2": "Translated chunk 2",
-                "3": "Translated chunk 3",
+                1: "Translated chunk 1",
+                2: "Translated chunk 2",
+                3: "Translated chunk 3",
             },
             token_usage=300,
             cost=0.03,
@@ -609,10 +609,10 @@ class TestResumeFromCheckpoint:
             completed_pages=[1, 3, 5],
             failed_pages=[2, 4],
             translated_chunks={
-                "1": "Translated page 1",
-                "3": "Translated page 3",
-                "5": "Translated page 5",
-                # Missing "2" and "4"
+                1: "Translated page 1",
+                3: "Translated page 3",
+                5: "Translated page 5",
+                # Missing 2 and 4
             },
             token_usage=150,
             cost=0.015,
@@ -630,8 +630,8 @@ class TestResumeFromCheckpoint:
         assert result.total_tokens == 150
         assert result.total_cost == 0.015
 
-    async def test_resume_with_string_and_int_chunk_keys(self, sample_config):
-        """Test resume handles both string and integer keys correctly."""
+    async def test_resume_with_all_integer_keys(self, sample_config):
+        """Test resume works correctly with integer keys (as real checkpoints have)."""
         manager = AsyncMock(spec=CheckpointManager)
         state = TranslationState(
             source_lang="en",
@@ -640,9 +640,9 @@ class TestResumeFromCheckpoint:
             completed_pages=[1, 2, 3],
             failed_pages=[],
             translated_chunks={
-                1: "Translated page 1",  # Integer key
-                "2": "Translated page 2",  # String key
-                "3": "Translated page 3",  # String key
+                1: "Translated page 1",
+                2: "Translated page 2",
+                3: "Translated page 3",
             },
             token_usage=150,
             cost=0.015,
@@ -655,10 +655,187 @@ class TestResumeFromCheckpoint:
         
         assert isinstance(result, ResumeResult)
         assert result.resumed is True
-        # Should only find string keys since the lookup uses str(i)
-        assert result.translated_items == ["Translated page 2", "Translated page 3"]  # Only "2" and "3" found as strings
+        # Should find all integer keys
+        assert result.translated_items == ["Translated page 1", "Translated page 2", "Translated page 3"]
         assert result.total_tokens == 150
         assert result.total_cost == 0.015
+
+    async def test_resume_with_integer_keys_like_real_checkpoint(self, sample_config):
+        """Test resume with integer keys as they appear in real checkpoints."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="context-aware",
+            completed_pages=[1],
+            failed_pages=[],
+            translated_chunks={
+                1: "First chunk content",
+                2: "Second chunk content", 
+                3: "Third chunk content",
+                4: "Fourth chunk content",
+                5: "Fifth chunk content",
+                6: "Sixth chunk content",
+                7: "Seventh chunk content",
+                8: "Eighth chunk content",
+            },
+            token_usage=40805,
+            cost=0.33133,
+            time_taken=592.174002,
+        )
+        manager.load.return_value = state
+        
+        result = await resume_from_checkpoint(manager, sample_config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        # Should find all 8 chunks with integer keys
+        assert len(result.translated_items) == 8
+        assert result.translated_items[0] == "First chunk content"
+        assert result.translated_items[7] == "Eighth chunk content"
+        assert result.total_tokens == 40805
+        assert result.total_cost == 0.33133
+
+    async def test_checkpoint_save_load_roundtrip_key_consistency(self, sample_config, temp_checkpoint_dir):
+        """Test complete checkpoint save/load/resume round-trip maintains key consistency."""
+        import json
+        
+        manager = CheckpointManager(sample_config)
+        
+        # Step 1: Create state with integer keys (as algorithms do)
+        original_state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="context-aware",
+            completed_pages=[1],
+            failed_pages=[],
+            translated_chunks={
+                1: "First chunk content",
+                2: "Second chunk content",
+                3: "Third chunk content",
+                4: "Fourth chunk content",
+                5: "Fifth chunk content",
+            },
+            token_usage=1000,
+            cost=0.1,
+            time_taken=60.0,
+        )
+        
+        # Step 2: Save the state (integer keys → JSON string keys)
+        await manager.save(original_state)
+        
+        # Step 3: Verify JSON file has string keys
+        checkpoint_path = temp_checkpoint_dir / "test_document_checkpoint.json"
+        assert checkpoint_path.exists()
+        
+        with open(checkpoint_path) as f:
+            json_data = json.load(f)
+        
+        # JSON should have string keys
+        json_chunks = json_data["translated_chunks"]
+        assert list(json_chunks.keys()) == ["1", "2", "3", "4", "5"]
+        assert json_chunks["1"] == "First chunk content"
+        assert json_chunks["5"] == "Fifth chunk content"
+        
+        # Step 4: Load the state back (JSON string keys → integer keys)
+        loaded_state = await manager.load()
+        
+        assert loaded_state is not None
+        # After loading, should have integer keys again
+        assert isinstance(loaded_state.translated_chunks, dict)
+        assert list(loaded_state.translated_chunks.keys()) == [1, 2, 3, 4, 5]
+        assert loaded_state.translated_chunks[1] == "First chunk content"
+        assert loaded_state.translated_chunks[5] == "Fifth chunk content"
+        
+        # Step 5: Test that resume_from_checkpoint works with the loaded state
+        manager_mock = AsyncMock(spec=CheckpointManager)
+        manager_mock.load.return_value = loaded_state
+        
+        result = await resume_from_checkpoint(manager_mock, sample_config)
+        
+        assert result.resumed is True
+        assert len(result.translated_items) == 5
+        assert result.translated_items == [
+            "First chunk content",
+            "Second chunk content", 
+            "Third chunk content",
+            "Fourth chunk content",
+            "Fifth chunk content"
+        ]
+        assert result.total_tokens == 1000
+        assert result.total_cost == 0.1
+        
+        # Step 6: Verify the complete round-trip maintains data integrity
+        assert original_state.translated_chunks == loaded_state.translated_chunks
+        assert original_state.token_usage == loaded_state.token_usage
+        assert original_state.cost == loaded_state.cost
+
+    async def test_resume_all_chunks_completed(self, sample_config):
+        """Test resume when all chunks have been translated previously."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="page",
+            completed_pages=[1, 2, 3],
+            failed_pages=[],
+            translated_chunks={
+                1: "Translated page 1",
+                2: "Translated page 2",
+                3: "Translated page 3",
+            },
+            token_usage=150,
+            cost=0.015,
+            time_taken=30.0,
+        )
+        manager.load.return_value = state
+        
+        config = sample_config.model_copy(update={"algorithm": "page"})
+        result = await resume_from_checkpoint(manager, config)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        assert result.translated_items == ["Translated page 1", "Translated page 2", "Translated page 3"]
+        assert result.total_tokens == 150
+        assert result.total_cost == 0.015
+        assert result.metadata == {}
+
+    async def test_resume_all_chunks_completed_context_aware(self, sample_config):
+        """Test context-aware resume when all chunks have been translated previously."""
+        manager = AsyncMock(spec=CheckpointManager)
+        state = TranslationState(
+            source_lang="en",
+            target_lang="es",
+            algorithm="context-aware",
+            completed_pages=[1],
+            failed_pages=[],
+            translated_chunks={
+                1: "Translated chunk 1",
+                2: "Translated chunk 2",
+                3: "Translated chunk 3",
+            },
+            token_usage=300,
+            cost=0.03,
+            time_taken=60.0,
+        )
+        manager.load.return_value = state
+        
+        # Provide exactly 3 source chunks to match the 3 translated chunks
+        source_chunks = ["Source chunk 1", "Source chunk 2", "Source chunk 3"]
+        
+        result = await resume_from_checkpoint(manager, sample_config, source_chunks)
+        
+        assert isinstance(result, ResumeResult)
+        assert result.resumed is True
+        assert result.translated_items == ["Translated chunk 1", "Translated chunk 2", "Translated chunk 3"]
+        assert result.total_tokens == 300
+        assert result.total_cost == 0.03
+        
+        # Should still have context metadata for the last chunk
+        assert "previous_chunk" in result.metadata
+        assert "previous_translation" in result.metadata
+        assert result.metadata["previous_chunk"] == "Source chunk 3"  # Last completed chunk (index 2)
+        assert result.metadata["previous_translation"] == "Translated chunk 3"
 
 
 class TestEdgeCases:
