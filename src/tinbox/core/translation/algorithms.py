@@ -178,13 +178,20 @@ async def translate_page_by_page(
                 total=len(content.pages),
             )
 
-        # Check for checkpoint
+        # Check for checkpoint and resume if available
+        translated_pages = []
         if checkpoint_manager and config.resume_from_checkpoint:
             checkpoint = await checkpoint_manager.load()
             if checkpoint:
-                translated_pages = list(checkpoint.translated_chunks.values())
+                # Load existing translated pages in order
+                translated_pages = [
+                    checkpoint.translated_chunks[str(i)]
+                    for i in range(1, len(checkpoint.translated_chunks) + 1)
+                    if str(i) in checkpoint.translated_chunks
+                ]
                 total_tokens = checkpoint.token_usage
                 total_cost = checkpoint.cost
+                logger.info(f"Resumed with {len(translated_pages)} completed pages")
                 if progress and task_id is not None:
                     progress.update(task_id, completed=len(translated_pages))
 
@@ -310,20 +317,6 @@ async def translate_sliding_window(
     total_cost = 0.0
 
     try:
-        # Check for checkpoint
-        if checkpoint_manager and config.resume_from_checkpoint:
-            logger.info("Checking for checkpoint")
-            checkpoint = await checkpoint_manager.load()
-            if checkpoint and checkpoint.translated_chunks:
-                logger.info("Found valid checkpoint")
-                time_taken = (datetime.now() - start_time).total_seconds()
-                return TranslationResponse(
-                    text="\n\n".join(checkpoint.translated_chunks.values()),
-                    tokens_used=checkpoint.token_usage,
-                    cost=checkpoint.cost,
-                    time_taken=time_taken,
-                )
-
         # Join all pages into single text
         text = "\n\n".join(content.pages)
         logger.debug(f"Combined text: {text}")
@@ -347,16 +340,33 @@ async def translate_sliding_window(
         )
         logger.info(f"Created {len(windows)} windows")
 
+        # Check for checkpoint and resume if available
+        translated_windows = []
+        if checkpoint_manager and config.resume_from_checkpoint:
+            logger.info("Checking for checkpoint")
+            checkpoint = await checkpoint_manager.load()
+            if checkpoint and checkpoint.translated_chunks:
+                logger.info("Found valid checkpoint, resuming from saved state")
+                # Load existing translated windows in order
+                translated_windows = [
+                    checkpoint.translated_chunks[str(i)]
+                    for i in range(1, len(checkpoint.translated_chunks) + 1)
+                    if str(i) in checkpoint.translated_chunks
+                ]
+                total_tokens = checkpoint.token_usage
+                total_cost = checkpoint.cost
+                logger.info(f"Resumed with {len(translated_windows)} completed windows")
+
         # Set up progress tracking
         if progress:
             task_id = progress.add_task(
                 "Translating windows...",
                 total=len(windows),
+                completed=len(translated_windows),
             )
 
-        # Translate each window
-        translated_windows = []
-        for i, window in enumerate(windows):
+        # Translate remaining windows
+        for i, window in enumerate(windows[len(translated_windows):], len(translated_windows)):
             logger.debug(f"Translating window {i + 1}: {window}")
             # Create translation request
             request = TranslationRequest(
@@ -377,7 +387,7 @@ async def translate_sliding_window(
             total_cost += response.cost
 
             # Update progress
-            if progress:
+            if progress and task_id is not None:
                 progress.update(task_id, advance=1)
 
             # Save checkpoint if needed
@@ -396,7 +406,7 @@ async def translate_sliding_window(
                     ],  # Sliding window treats the whole document as one page
                     failed_pages=[],
                     translated_chunks={
-                        i + 1: text for i, text in enumerate(translated_windows)
+                        j + 1: text for j, text in enumerate(translated_windows)
                     },
                     token_usage=total_tokens,
                     cost=total_cost,
@@ -777,21 +787,6 @@ async def translate_context_aware(
     task_id: Optional[TaskID] = None
 
     try:
-        # Check for checkpoint
-        if checkpoint_manager and config.resume_from_checkpoint:
-            logger.info("Checking for checkpoint")
-            checkpoint = await checkpoint_manager.load()
-            if checkpoint and checkpoint.translated_chunks:
-                logger.info("Found valid checkpoint, resuming from saved state")
-                time_taken = (datetime.now() - start_time).total_seconds()
-                ## TODO: Here we shouldn't return, but continue!
-                return TranslationResponse(
-                    text="".join(checkpoint.translated_chunks.values()),
-                    tokens_used=checkpoint.token_usage,
-                    cost=checkpoint.cost,
-                    time_taken=time_taken,
-                )
-
         # Join all pages into single text
         text = "\n\n".join(content.pages)
         logger.info(f"Combined text length: {len(text)} characters")
@@ -809,19 +804,43 @@ async def translate_context_aware(
         logger.debug(f"Chunks: {chunks}")
         logger.info(f"Created {len(chunks)} chunks using context-aware splitting")
 
+        # Check for checkpoint and resume if available
+        translated_chunks = []
+        previous_chunk: Optional[str] = None
+        previous_translation: Optional[str] = None
+        
+        if checkpoint_manager and config.resume_from_checkpoint:
+            logger.info("Checking for checkpoint")
+            checkpoint = await checkpoint_manager.load()
+            if checkpoint and checkpoint.translated_chunks:
+                logger.info("Found valid checkpoint, resuming from saved state")
+                # Load existing translated chunks in order
+                translated_chunks = [
+                    checkpoint.translated_chunks[str(i)]
+                    for i in range(1, len(checkpoint.translated_chunks) + 1)
+                    if str(i) in checkpoint.translated_chunks
+                ]
+                total_tokens = checkpoint.token_usage
+                total_cost = checkpoint.cost
+                logger.info(f"Resumed with {len(translated_chunks)} completed chunks")
+                
+                # Set up context from the last completed chunk
+                if translated_chunks and len(translated_chunks) > 0:
+                    chunk_index = len(translated_chunks) - 1
+                    if chunk_index < len(chunks):
+                        previous_chunk = chunks[chunk_index]
+                        previous_translation = translated_chunks[-1]
+
         # Set up progress tracking
         if progress:
             task_id = progress.add_task(
                 "Translating chunks...",
                 total=len(chunks),
+                completed=len(translated_chunks),
             )
 
-        # Translate each chunk with context
-        translated_chunks = []
-        previous_chunk: Optional[str] = None
-        previous_translation: Optional[str] = None
-
-        for i, current_chunk in enumerate(chunks):
+        # Translate remaining chunks with context
+        for i, current_chunk in enumerate(chunks[len(translated_chunks):], len(translated_chunks)):
             logger.debug(f"Translating chunk {i + 1}/{len(chunks)}")
             
             # Build context for this chunk

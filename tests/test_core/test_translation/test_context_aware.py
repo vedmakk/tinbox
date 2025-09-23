@@ -362,40 +362,66 @@ class TestTranslateContextAware:
         self, context_aware_config, mock_translator, mock_checkpoint_manager
     ):
         """Test resuming translation from checkpoint."""
-        # Configure checkpoint manager to return existing checkpoint
+        # Configure checkpoint manager to return existing checkpoint with partial completion
         existing_checkpoint = TranslationState(
             source_lang="en",
             target_lang="fr",
             algorithm="context-aware",
             completed_pages=[1],
             failed_pages=[],
-            translated_chunks={1: "Previously translated content"},
+            translated_chunks={"1": "Previously translated chunk 1"},
             token_usage=50,
             cost=0.05,
             time_taken=5.0,
         )
         mock_checkpoint_manager.load = AsyncMock(return_value=existing_checkpoint)
 
+        # Content that will create multiple chunks, so we can test resumption
         content = DocumentContent(
-            pages=["Any content"],
+            pages=["First chunk content. Second chunk content that will be processed."],
             content_type="text/plain",
             metadata={},
         )
 
+        # Mock translator to handle context format
+        def mock_context_translate(request):
+            content_text = request.content
+            if "[TRANSLATE_THIS]" in content_text and "[/TRANSLATE_THIS]" in content_text:
+                start = content_text.find("[TRANSLATE_THIS]") + len("[TRANSLATE_THIS]")
+                end = content_text.find("[/TRANSLATE_THIS]")
+                actual_content = content_text[start:end].strip()
+                return TranslationResponse(
+                    text=f"Translated: {actual_content}",
+                    tokens_used=10,
+                    cost=0.01,
+                    time_taken=0.1,
+                )
+            return TranslationResponse(
+                text="Translated chunk",
+                tokens_used=10,
+                cost=0.01,
+                time_taken=0.1,
+            )
+        
+        mock_translator.translate = AsyncMock(side_effect=mock_context_translate)
+
         result = await translate_context_aware(
             content,
             context_aware_config,
-            mock_translator,
             checkpoint_manager=mock_checkpoint_manager,
+            translator=mock_translator,
         )
 
-        # Should not make any new translation calls
-        mock_translator.translate.assert_not_called()
+        # Should load checkpoint
+        mock_checkpoint_manager.load.assert_called_once()
 
-        # Should return checkpoint data
-        assert result.text == "Previously translated content"
-        assert result.tokens_used == 50
-        assert result.cost == 0.05
+        # Should make translation calls for remaining chunks
+        assert mock_translator.translate.called
+
+        # Should include checkpoint data in final result
+        assert result.tokens_used >= 50  # At least the checkpoint tokens
+        assert result.cost >= 0.05  # At least the checkpoint cost
+        assert "Previously translated chunk 1" in result.text
 
     async def test_translate_image_content_error(
         self, context_aware_config, mock_translator

@@ -56,7 +56,7 @@ def mock_checkpoint_manager():
             algorithm="page",
             completed_pages=[1],
             failed_pages=[],
-            translated_chunks={1: "Translated page 1"},
+            translated_chunks={"1": "Translated page 1"},
             token_usage=10,
             cost=0.001,
             time_taken=1.0,
@@ -478,3 +478,279 @@ async def test_translate_document_algorithm_routing():
             algorithm="unknown-algorithm",
             input_file=Path("test.txt"),
         )
+
+
+# Comprehensive checkpoint recovery tests
+async def test_page_by_page_checkpoint_recovery():
+    """Test that page-by-page translation properly recovers from checkpoint."""
+    # Create mock translator
+    translator = AsyncMock(spec=ModelInterface)
+    translator.translate.return_value = TranslationResponse(
+        text="Newly translated",
+        tokens_used=5,
+        cost=0.0005,
+        time_taken=0.1,
+    )
+
+    # Create checkpoint manager that returns partial completion
+    checkpoint_manager = AsyncMock(spec=CheckpointManager)
+    checkpoint_manager.load.return_value = TranslationState(
+        source_lang="en",
+        target_lang="fr",
+        algorithm="page",
+        completed_pages=[1, 2],
+        failed_pages=[],
+        translated_chunks={"1": "Translated page 1", "2": "Translated page 2"},
+        token_usage=20,
+        cost=0.002,
+        time_taken=2.0,
+    )
+    checkpoint_manager.save = AsyncMock()
+    checkpoint_manager.cleanup_old_checkpoints = AsyncMock()
+
+    # Create content with 4 pages
+    content = DocumentContent(
+        pages=["Page 1", "Page 2", "Page 3", "Page 4"],
+        content_type="text/plain",
+        metadata={},
+    )
+
+    config = TranslationConfig(
+        source_lang="en",
+        target_lang="fr",
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
+        algorithm="page",
+        input_file=Path("test.txt"),
+        checkpoint_dir=Path("checkpoints"),
+        checkpoint_frequency=1,
+        resume_from_checkpoint=True,
+    )
+
+    # Translate
+    result = await translate_page_by_page(
+        content, config, translator, checkpoint_manager=checkpoint_manager
+    )
+
+    # Should load checkpoint
+    checkpoint_manager.load.assert_called_once()
+
+    # Should only translate remaining pages (3 and 4)
+    assert translator.translate.call_count == 2
+
+    # Should include checkpoint data in final result
+    assert result.tokens_used >= 20  # At least the checkpoint tokens
+    assert result.cost >= 0.002  # At least the checkpoint cost
+
+    # Should save checkpoints for new translations
+    assert checkpoint_manager.save.called
+
+    # Should clean up checkpoints when done
+    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()
+
+
+async def test_sliding_window_checkpoint_recovery():
+    """Test that sliding window translation properly recovers from checkpoint."""
+    # Create mock translator
+    translator = AsyncMock(spec=ModelInterface)
+    translator.translate.return_value = TranslationResponse(
+        text="Newly translated window",
+        tokens_used=5,
+        cost=0.0005,
+        time_taken=0.1,
+    )
+
+    # Create checkpoint manager that returns partial completion
+    checkpoint_manager = AsyncMock(spec=CheckpointManager)
+    checkpoint_manager.load.return_value = TranslationState(
+        source_lang="en",
+        target_lang="fr",
+        algorithm="sliding-window",
+        completed_pages=[1],
+        failed_pages=[],
+        translated_chunks={"1": "Translated window 1", "2": "Translated window 2"},
+        token_usage=20,
+        cost=0.002,
+        time_taken=2.0,
+    )
+    checkpoint_manager.save = AsyncMock()
+    checkpoint_manager.cleanup_old_checkpoints = AsyncMock()
+
+    # Create content that will create multiple windows
+    content = DocumentContent(
+        pages=["This is a long text that will be split into multiple windows for translation using sliding window algorithm"],
+        content_type="text/plain",
+        metadata={},
+    )
+
+    config = TranslationConfig(
+        source_lang="en",
+        target_lang="fr",
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
+        algorithm="sliding-window",
+        input_file=Path("test.txt"),
+        window_size=20,
+        overlap_size=5,
+        checkpoint_dir=Path("checkpoints"),
+        checkpoint_frequency=1,
+        resume_from_checkpoint=True,
+    )
+
+    # Translate
+    result = await translate_sliding_window(
+        content, config, translator, checkpoint_manager=checkpoint_manager
+    )
+
+    # Should load checkpoint
+    checkpoint_manager.load.assert_called_once()
+
+    # Should translate remaining windows (not all windows)
+    assert translator.translate.call_count >= 1  # At least some remaining windows
+
+    # Should include checkpoint data in final result
+    assert result.tokens_used >= 20  # At least the checkpoint tokens
+    assert result.cost >= 0.002  # At least the checkpoint cost
+
+    # Should save checkpoints for new translations
+    assert checkpoint_manager.save.called
+
+    # Should clean up checkpoints when done
+    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()
+
+
+async def test_context_aware_checkpoint_recovery():
+    """Test that context-aware translation properly recovers from checkpoint."""
+    # Create mock translator that handles context format
+    translator = AsyncMock(spec=ModelInterface)
+    
+    def mock_context_translate(request):
+        content = request.content
+        if "[TRANSLATE_THIS]" in content and "[/TRANSLATE_THIS]" in content:
+            start = content.find("[TRANSLATE_THIS]") + len("[TRANSLATE_THIS]")
+            end = content.find("[/TRANSLATE_THIS]")
+            actual_content = content[start:end].strip()
+            return TranslationResponse(
+                text=f"Translated: {actual_content}",
+                tokens_used=5,
+                cost=0.0005,
+                time_taken=0.1,
+            )
+        return TranslationResponse(
+            text="Translated chunk",
+            tokens_used=5,
+            cost=0.0005,
+            time_taken=0.1,
+        )
+    
+    translator.translate = AsyncMock(side_effect=mock_context_translate)
+
+    # Create checkpoint manager that returns partial completion
+    checkpoint_manager = AsyncMock(spec=CheckpointManager)
+    checkpoint_manager.load.return_value = TranslationState(
+        source_lang="en",
+        target_lang="fr",
+        algorithm="context-aware",
+        completed_pages=[1],
+        failed_pages=[],
+        translated_chunks={"1": "Translated chunk 1", "2": "Translated chunk 2"},
+        token_usage=20,
+        cost=0.002,
+        time_taken=2.0,
+    )
+    checkpoint_manager.save = AsyncMock()
+    checkpoint_manager.cleanup_old_checkpoints = AsyncMock()
+
+    # Create content that will create multiple chunks
+    content = DocumentContent(
+        pages=["This is chunk one content. This is chunk two content. This is chunk three content. This is chunk four content."],
+        content_type="text/plain",
+        metadata={},
+    )
+
+    config = TranslationConfig(
+        source_lang="en",
+        target_lang="fr",
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
+        algorithm="context-aware",
+        input_file=Path("test.txt"),
+        context_size=30,  # Small size to create multiple chunks
+        checkpoint_dir=Path("checkpoints"),
+        checkpoint_frequency=1,
+        resume_from_checkpoint=True,
+    )
+
+    # Translate
+    result = await translate_context_aware(
+        content, config, translator, checkpoint_manager=checkpoint_manager
+    )
+
+    # Should load checkpoint
+    checkpoint_manager.load.assert_called_once()
+
+    # Should translate remaining chunks (not all chunks)
+    assert translator.translate.call_count >= 1  # At least some remaining chunks
+
+    # Should include checkpoint data in final result
+    assert result.tokens_used >= 20  # At least the checkpoint tokens
+    assert result.cost >= 0.002  # At least the checkpoint cost
+
+    # Should save checkpoints for new translations
+    assert checkpoint_manager.save.called
+
+    # Should clean up checkpoints when done
+    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()
+
+
+async def test_no_checkpoint_available():
+    """Test behavior when no checkpoint is available."""
+    # Create mock translator
+    translator = AsyncMock(spec=ModelInterface)
+    translator.translate.return_value = TranslationResponse(
+        text="Translated",
+        tokens_used=5,
+        cost=0.0005,
+        time_taken=0.1,
+    )
+
+    # Create checkpoint manager that returns no checkpoint
+    checkpoint_manager = AsyncMock(spec=CheckpointManager)
+    checkpoint_manager.load.return_value = None
+    checkpoint_manager.save = AsyncMock()
+    checkpoint_manager.cleanup_old_checkpoints = AsyncMock()
+
+    content = DocumentContent(
+        pages=["Page 1", "Page 2"],
+        content_type="text/plain",
+        metadata={},
+    )
+
+    config = TranslationConfig(
+        source_lang="en",
+        target_lang="fr",
+        model=ModelType.ANTHROPIC,
+        model_name="claude-3-sonnet",
+        algorithm="page",
+        input_file=Path("test.txt"),
+        checkpoint_dir=Path("checkpoints"),
+        checkpoint_frequency=1,
+        resume_from_checkpoint=True,
+    )
+
+    # Translate
+    result = await translate_page_by_page(
+        content, config, translator, checkpoint_manager=checkpoint_manager
+    )
+
+    # Should attempt to load checkpoint
+    checkpoint_manager.load.assert_called_once()
+
+    # Should translate all pages since no checkpoint
+    assert translator.translate.call_count == 2
+
+    # Should save checkpoints during translation
+    assert checkpoint_manager.save.called
+
+    # Should clean up checkpoints when done
+    checkpoint_manager.cleanup_old_checkpoints.assert_called_once()

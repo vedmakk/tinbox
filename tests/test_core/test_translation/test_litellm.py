@@ -36,6 +36,7 @@ def mock_completion():
                         "Choice",
                         (),
                         {
+                            "finish_reason": "stop",
                             "message": type(
                                 "Message",
                                 (),
