@@ -25,7 +25,7 @@ class TranslationRequest(BaseModel):
         default_factory=dict
     )  # Additional model-specific parameters
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, protected_namespaces=())
 
 
 class TranslationResponse(BaseModel):

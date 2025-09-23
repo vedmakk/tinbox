@@ -94,6 +94,7 @@ class TranslationConfig(BaseModel):
     model_config = ConfigDict(
         frozen=True,  # Make config immutable
         arbitrary_types_allowed=True,  # Allow Callable type for progress_callback
+        protected_namespaces=(),  # Allow model_* field names
     )
 
 
