@@ -205,8 +205,11 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Translation failed: Empty content"):
-        await translator.translate(request)
+    response = await translator.translate(request)
+    assert response.text == ""
+    assert response.tokens_used == 0
+    assert response.cost == 0.0
+    assert response.time_taken > 0
 
     # Whitespace only
     request = TranslationRequest(
@@ -218,8 +221,11 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         model_params={"model_name": "claude-3-sonnet"},
     )
 
-    with pytest.raises(TranslationError, match="Translation failed: Empty content"):
-        await translator.translate(request)
+    response = await translator.translate(request)
+    assert response.text == "   \n   "
+    assert response.tokens_used == 0
+    assert response.cost == 0.0
+    assert response.time_taken > 0
 
 
 @pytest.mark.asyncio
