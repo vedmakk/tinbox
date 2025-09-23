@@ -305,6 +305,9 @@ class LiteLLMTranslator(ModelInterface):
                     if not hasattr(response, "choices") or not response.choices:
                         raise TranslationError("No response from model")
 
+                    if not hasattr(response.choices[0], "finish_reason") or not response.choices[0].finish_reason == "stop":
+                        raise TranslationError(f"Invalid finish reason from model: {response.choices[0].finish_reason}, expected 'stop'")
+
                     if not hasattr(response.choices[0], "message") or not hasattr(
                         response.choices[0].message, "content"
                     ):
