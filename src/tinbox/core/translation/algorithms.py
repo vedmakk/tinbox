@@ -234,9 +234,11 @@ async def translate_page_by_page(
 
                 # Translate page
                 response = await translator.translate(request)
+
                 # Update glossary if new terms were discovered
                 if response.glossary_updates and glossary_manager:
                     glossary_manager.update_glossary(response.glossary_updates)
+                
                 translated_pages.append(response.text)
                 total_tokens += response.tokens_used
                 total_cost += response.cost
@@ -270,6 +272,9 @@ async def translate_page_by_page(
             except Exception as e:
                 logger.error(f"Failed to translate page {i + 1}: {str(e)}")
                 failed_pages.append(i + 1)
+
+            if config.max_cost and total_cost > config.max_cost:
+                raise TranslationError(f"Translation cost of {total_cost:.2f} exceeded maximum cost of {config.max_cost:.2f}")
 
         if not translated_pages:
             if failed_pages:
@@ -396,9 +401,11 @@ async def translate_sliding_window(
 
             # Translate window
             response = await translator.translate(request)
+
             # Update glossary if new terms were discovered
             if response.glossary_updates and glossary_manager:
                 glossary_manager.update_glossary(response.glossary_updates)
+            
             translated_windows.append(response.text)
             total_tokens += response.tokens_used
             total_cost += response.cost
@@ -431,6 +438,9 @@ async def translate_sliding_window(
                     glossary_entries=glossary_manager.get_current_glossary().entries if glossary_manager else {},
                 )
                 await checkpoint_manager.save(state)
+
+            if config.max_cost and total_cost > config.max_cost:
+                raise TranslationError(f"Translation cost of {total_cost:.2f} exceeded maximum cost of {config.max_cost:.2f}")
 
         # Merge windows
         final_text = merge_chunks(translated_windows, overlap_size)
@@ -864,13 +874,14 @@ async def translate_context_aware(
 
             # Translate chunk
             response = await translator.translate(request)
-            translated_chunks.append(response.text)
-            total_tokens += response.tokens_used
-            total_cost += response.cost
 
             # Update glossary if new terms were discovered
             if response.glossary_updates and glossary_manager:
                 glossary_manager.update_glossary(response.glossary_updates)
+
+            translated_chunks.append(response.text)
+            total_tokens += response.tokens_used
+            total_cost += response.cost
 
             # Update progress
             if progress and task_id is not None:
@@ -898,6 +909,9 @@ async def translate_context_aware(
                     glossary_entries=glossary_manager.get_current_glossary().entries if glossary_manager else {},
                 )
                 await checkpoint_manager.save(state)
+
+            if config.max_cost and total_cost > config.max_cost:
+                raise TranslationError(f"Translation cost of {total_cost:.2f} exceeded maximum cost of {config.max_cost:.2f}")
 
             # Update context for next iteration
             previous_chunk = current_chunk
