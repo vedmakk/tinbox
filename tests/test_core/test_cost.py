@@ -154,9 +154,9 @@ def test_estimate_context_aware_tokens():
     """Test context-aware token estimation."""
     base_tokens = 1000
     
-    # Test with default multiplier (3.0)
+    # Test with default multiplier (4.0)
     result = estimate_context_aware_tokens(base_tokens)
-    assert result == 3000
+    assert result == 4000
     
     # Test with custom multiplier
     result = estimate_context_aware_tokens(base_tokens, context_multiplier=2.0)
@@ -172,7 +172,7 @@ def test_estimate_context_aware_tokens():
     [
         ("page", 1000, 1000),
         ("sliding-window", 1000, 1000),
-        ("context-aware", 3000, 1000),  # 3.0x input tokens for context overhead
+        ("context-aware", 4000, 1000),  # 4.0x input tokens for context overhead
     ],
 )
 def test_estimate_cost_by_algorithm(tmp_path, algorithm, expected_input_tokens, expected_output_tokens):
@@ -187,7 +187,7 @@ def test_estimate_cost_by_algorithm(tmp_path, algorithm, expected_input_tokens, 
         
         # Account for prompt overhead (3%)
         if algorithm == "context-aware":
-            # Context-aware: 3000 input tokens + 3% prompt overhead
+            # Context-aware: 4000 input tokens + 3% prompt overhead
             adjusted_input_tokens = expected_input_tokens + (expected_input_tokens * 0.03)
         else:
             # Page/sliding-window: 1000 input tokens + 3% prompt overhead
@@ -220,11 +220,11 @@ def test_context_aware_cost_warning():
         
         # Should mention the overhead amount
         warning = context_warnings[0]
-        # Context-aware tokens: 3000, plus 3% prompt overhead = 3090
-        # Overhead: 3090 - 1000 = 2090
-        # Percentage: 2090/1000 * 100 = 209%
-        assert "+2,090 tokens" in warning
-        assert "~209% overhead" in warning
+        # Context-aware tokens: 4000, plus 3% prompt overhead = 4120
+        # Overhead: 4120 - 1000 = 3120
+        # Percentage: 3120/1000 * 100 = 312%
+        assert "+3,120 tokens" in warning
+        assert "~312% overhead" in warning
 
 
 def test_context_aware_no_warning_for_ollama():

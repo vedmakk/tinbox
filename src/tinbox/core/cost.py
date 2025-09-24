@@ -113,7 +113,7 @@ class CostEstimate:
 
 def estimate_context_aware_tokens(
     estimated_tokens: int,
-    context_multiplier: float = 3
+    context_multiplier: float = 4
 ) -> int:
     """Estimate input tokens for context-aware translation.
 

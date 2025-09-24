@@ -12,7 +12,7 @@ class TestTranslationRequestWithContext:
 
     def test_translation_request_with_context(self):
         """Test creating TranslationRequest with context."""
-        context_info = "[PREVIOUS_SOURCE]\nPrevious text\n[/PREVIOUS_SOURCE]\n\n[PREVIOUS_TRANSLATION]\nTexto anterior\n[/PREVIOUS_TRANSLATION]"
+        context_info = "[PREVIOUS_CHUNK]\nPrevious text\n[/PREVIOUS_CHUNK]\n\n[PREVIOUS_CHUNK_TRANSLATION]\nTexto anterior\n[/PREVIOUS_CHUNK_TRANSLATION]"
         
         request = TranslationRequest(
             source_lang="en",
@@ -82,12 +82,12 @@ class TestBuildTranslationContextInfo:
         )
 
         assert context is not None
-        assert "[PREVIOUS_SOURCE]" in context
+        assert "[PREVIOUS_CHUNK]" in context
         assert "Previous text" in context
-        assert "[/PREVIOUS_SOURCE]" in context
-        assert "[PREVIOUS_TRANSLATION]" in context
+        assert "[/PREVIOUS_CHUNK]" in context
+        assert "[PREVIOUS_CHUNK_TRANSLATION]" in context
         assert "Texto anterior" in context
-        assert "[/PREVIOUS_TRANSLATION]" in context
+        assert "[/PREVIOUS_CHUNK_TRANSLATION]" in context
         assert "Use this context to maintain consistency" in context
 
     def test_context_info_with_previous_chunks(self):
@@ -100,8 +100,8 @@ class TestBuildTranslationContextInfo:
         )
 
         expected_parts = [
-            "[PREVIOUS_SOURCE]\nHello world\n[/PREVIOUS_SOURCE]",
-            "[PREVIOUS_TRANSLATION]\nBonjour le monde\n[/PREVIOUS_TRANSLATION]",
+            "[PREVIOUS_CHUNK]\nHello world\n[/PREVIOUS_CHUNK]",
+            "[PREVIOUS_CHUNK_TRANSLATION]\nBonjour le monde\n[/PREVIOUS_CHUNK_TRANSLATION]",
             "Use this context to maintain consistency in terminology and style."
         ]
         
@@ -176,19 +176,19 @@ class TestBuildTranslationContextInfo:
         )
 
         # Check tag structure
-        assert context.count("[PREVIOUS_SOURCE]") == 1
-        assert context.count("[/PREVIOUS_SOURCE]") == 1
-        assert context.count("[PREVIOUS_TRANSLATION]") == 1
-        assert context.count("[/PREVIOUS_TRANSLATION]") == 1
+        assert context.count("[PREVIOUS_CHUNK]") == 1
+        assert context.count("[/PREVIOUS_CHUNK]") == 1
+        assert context.count("[PREVIOUS_CHUNK_TRANSLATION]") == 1
+        assert context.count("[/PREVIOUS_CHUNK_TRANSLATION]") == 1
 
         # Check that content is properly enclosed in tags
-        source_start = context.find("[PREVIOUS_SOURCE]") + len("[PREVIOUS_SOURCE]")
-        source_end = context.find("[/PREVIOUS_SOURCE]")
+        source_start = context.find("[PREVIOUS_CHUNK]") + len("[PREVIOUS_CHUNK]")
+        source_end = context.find("[/PREVIOUS_CHUNK]")
         source_content = context[source_start:source_end].strip()
         assert source_content == "Sample text"
 
-        trans_start = context.find("[PREVIOUS_TRANSLATION]") + len("[PREVIOUS_TRANSLATION]")
-        trans_end = context.find("[/PREVIOUS_TRANSLATION]")
+        trans_start = context.find("[PREVIOUS_CHUNK_TRANSLATION]") + len("[PREVIOUS_CHUNK_TRANSLATION]")
+        trans_end = context.find("[/PREVIOUS_CHUNK_TRANSLATION]")
         trans_content = context[trans_start:trans_end].strip()
         assert trans_content == "Texto de muestra"
 
@@ -211,6 +211,77 @@ class TestBuildTranslationContextInfo:
         # Verify multiline content is preserved
         assert "Line 1\nLine 2\nLine 3" in context
         assert "Línea 1\nLínea 2\nLínea 3" in context
+
+    def test_context_info_with_next_chunk_functionality(self):
+        """Test the new next chunk functionality."""
+        # Test with only next chunk (first chunk scenario)
+        context = build_translation_context_info(
+            source_lang="en",
+            target_lang="es",
+            next_chunk="Next chunk content"
+        )
+        
+        assert context is not None
+        assert "[NEXT_CHUNK]" in context
+        assert "Next chunk content" in context
+        assert "[/NEXT_CHUNK]" in context
+        assert "[PREVIOUS_CHUNK]" not in context
+        assert "[PREVIOUS_CHUNK_TRANSLATION]" not in context
+
+    def test_context_info_with_all_context_types(self):
+        """Test context building with previous, translation, and next chunks."""
+        context = build_translation_context_info(
+            source_lang="en",
+            target_lang="es",
+            previous_chunk="Previous text",
+            previous_translation="Texto anterior",
+            next_chunk="Next text"
+        )
+        
+        assert context is not None
+        # Check all context types are present
+        assert "[PREVIOUS_CHUNK]" in context
+        assert "Previous text" in context
+        assert "[/PREVIOUS_CHUNK]" in context
+        assert "[PREVIOUS_CHUNK_TRANSLATION]" in context
+        assert "Texto anterior" in context
+        assert "[/PREVIOUS_CHUNK_TRANSLATION]" in context
+        assert "[NEXT_CHUNK]" in context
+        assert "Next text" in context
+        assert "[/NEXT_CHUNK]" in context
+
+    def test_context_info_edge_case_empty_next(self):
+        """Test context building with empty next chunk."""
+        context = build_translation_context_info(
+            source_lang="en",
+            target_lang="es",
+            previous_chunk="Previous text",
+            previous_translation="Texto anterior",
+            next_chunk=""
+        )
+        
+        assert context is not None
+        # Should only have previous context, not next
+        assert "[PREVIOUS_CHUNK]" in context
+        assert "[PREVIOUS_CHUNK_TRANSLATION]" in context
+        assert "[NEXT_CHUNK]" not in context
+
+    def test_context_info_incomplete_previous_with_next(self):
+        """Test that incomplete previous context is ignored when next is available."""
+        context = build_translation_context_info(
+            source_lang="en",
+            target_lang="es",
+            previous_chunk="Previous text",
+            previous_translation=None,  # Missing translation
+            next_chunk="Next text"
+        )
+        
+        assert context is not None
+        # Should only have next context since previous is incomplete
+        assert "[NEXT_CHUNK]" in context
+        assert "Next text" in context
+        assert "[PREVIOUS_CHUNK]" not in context
+        assert "[PREVIOUS_CHUNK_TRANSLATION]" not in context
 
 
 class TestBackwardCompatibility:

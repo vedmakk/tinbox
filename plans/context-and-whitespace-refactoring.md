@@ -22,8 +22,8 @@ def build_translation_context(
     context = f"Translate the following text from {source_lang} to {target_lang}.\n\n"
 
     if previous_chunk and previous_translation:
-        context += f"[PREVIOUS_SOURCE]{previous_chunk}[/PREVIOUS_SOURCE]\n\n"
-        context += f"[PREVIOUS_TRANSLATION]{previous_translation}[/PREVIOUS_TRANSLATION]\n\n"
+        context += f"[PREVIOUS_CHUNK]{previous_chunk}[/PREVIOUS_CHUNK]\n\n"
+        context += f"[PREVIOUS_CHUNK_TRANSLATION]{previous_translation}[/PREVIOUS_CHUNK_TRANSLATION]\n\n"
 
     context += f"[TRANSLATE_THIS]{current_chunk}[/TRANSLATE_THIS]\n\n"
     context += "Only return the translation of the text between [TRANSLATE_THIS] tags..."
@@ -130,8 +130,8 @@ def build_translation_context_info(
         return None
 
     return (
-        f"[PREVIOUS_SOURCE]\n{previous_chunk}\n[/PREVIOUS_SOURCE]\n\n"
-        f"[PREVIOUS_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_TRANSLATION]\n\n"
+        f"[PREVIOUS_CHUNK]\n{previous_chunk}\n[/PREVIOUS_CHUNK]\n\n"
+        f"[PREVIOUS_CHUNK_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_CHUNK_TRANSLATION]\n\n"
         f"Use this context to maintain consistency in terminology and style."
     )
 
@@ -275,8 +275,8 @@ def build_translation_context_info(
         return None
 
     context_parts = []
-    context_parts.append(f"[PREVIOUS_SOURCE]\n{previous_chunk}\n[/PREVIOUS_SOURCE]")
-    context_parts.append(f"[PREVIOUS_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_TRANSLATION]")
+    context_parts.append(f"[PREVIOUS_CHUNK]\n{previous_chunk}\n[/PREVIOUS_CHUNK]")
+    context_parts.append(f"[PREVIOUS_CHUNK_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_CHUNK_TRANSLATION]")
     context_parts.append("Use this context to maintain consistency in terminology and style.")
 
     return "\n\n".join(context_parts)

@@ -462,7 +462,7 @@ async def test_whitespace_preservation_complex(translator: LiteLLMTranslator, mo
 @pytest.mark.asyncio
 async def test_context_handling(translator: LiteLLMTranslator, mock_completion):
     """Test context handling in prompt construction."""
-    context_info = "[PREVIOUS_SOURCE]\nPrevious text\n[/PREVIOUS_SOURCE]\n\n[PREVIOUS_TRANSLATION]\nTexto anterior\n[/PREVIOUS_TRANSLATION]\n\nUse this context to maintain consistency in terminology and style."
+    context_info = "[PREVIOUS_CHUNK]\nPrevious text\n[/PREVIOUS_CHUNK]\n\n[PREVIOUS_CHUNK_TRANSLATION]\nTexto anterior\n[/PREVIOUS_CHUNK_TRANSLATION]\n\nUse this context to maintain consistency in terminology and style."
     
     request = TranslationRequest(
         source_lang="en",

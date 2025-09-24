@@ -751,6 +751,7 @@ def build_translation_context_info(
     target_lang: str,
     previous_chunk: Optional[str] = None,
     previous_translation: Optional[str] = None,
+    next_chunk: Optional[str] = None,
 ) -> Optional[str]:
     """Build context information for translation consistency using tag-based notation.
 
@@ -759,19 +760,28 @@ def build_translation_context_info(
         target_lang: Target language code  
         previous_chunk: Previous chunk (for context)
         previous_translation: Previous translation (for consistency)
+        next_chunk: Next chunk (for context and flow)
 
     Returns:
         Context information string, or None if no context available
     """
-    if not previous_chunk or not previous_translation:
-        return None
-
     context_parts = []
-    context_parts.append(f"[PREVIOUS_SOURCE]\n{previous_chunk}\n[/PREVIOUS_SOURCE]")
-    context_parts.append(f"[PREVIOUS_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_TRANSLATION]")
-    context_parts.append("Use this context to maintain consistency in terminology and style.")
-
-    return "\n\n".join(context_parts)
+    
+    # Add previous context if both chunk and translation are available
+    if previous_chunk and previous_translation:
+        context_parts.append(f"[PREVIOUS_CHUNK]\n{previous_chunk}\n[/PREVIOUS_CHUNK]")
+        context_parts.append(f"[PREVIOUS_CHUNK_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_CHUNK_TRANSLATION]")
+    
+    # Add next context if available
+    if next_chunk:
+        context_parts.append(f"[NEXT_CHUNK]\n{next_chunk}\n[/NEXT_CHUNK]")
+    
+    # Return context if we have any parts, otherwise None
+    if context_parts:
+        context_parts.append("Use this context to maintain consistency in terminology and style.")
+        return "\n\n".join(context_parts)
+    
+    return None
 
 
 async def translate_context_aware(
@@ -850,12 +860,16 @@ async def translate_context_aware(
         for i, current_chunk in enumerate(chunks[len(translated_chunks):], len(translated_chunks)):
             logger.debug(f"Translating chunk {i + 1}/{len(chunks)}")
             
+            # Get the next chunk if available
+            next_chunk = chunks[i + 1] if i + 1 < len(chunks) else None
+            
             # Build context information for this chunk
             context_info = build_translation_context_info(
                 source_lang=config.source_lang,
                 target_lang=config.target_lang,
                 previous_chunk=previous_chunk,
                 previous_translation=previous_translation,
+                next_chunk=next_chunk,
             )
 
             # Create translation request with separate content and context

@@ -142,7 +142,7 @@ class TestWhitespacePreservationEndToEnd:
         """Test whitespace preservation with context."""
         translator = LiteLLMTranslator()
         
-        context_info = "[PREVIOUS_SOURCE]\nPrevious\n[/PREVIOUS_SOURCE]\n\n[PREVIOUS_TRANSLATION]\nAnterior\n[/PREVIOUS_TRANSLATION]"
+        context_info = "[PREVIOUS_CHUNK]\nPrevious\n[/PREVIOUS_CHUNK]\n\n[PREVIOUS_CHUNK_TRANSLATION]\nAnterior\n[/PREVIOUS_CHUNK_TRANSLATION]"
         
         request = TranslationRequest(
             source_lang="en",
