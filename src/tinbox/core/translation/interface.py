@@ -1,6 +1,6 @@
 """Translation interface definitions."""
 
-from typing import AsyncIterator, Protocol, Union
+from typing import AsyncIterator, Optional, Protocol, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -18,7 +18,8 @@ class TranslationRequest(BaseModel):
 
     source_lang: str
     target_lang: str
-    content: Union[str, bytes]  # text or image bytes
+    content: Union[str, bytes]  # Pure content to translate (text or image bytes)
+    context: Optional[str] = None  # Supporting context information for better translation
     content_type: str = Field(pattern=r"^(text|image)/.+$")
     model: ModelType
     model_params: dict = Field(

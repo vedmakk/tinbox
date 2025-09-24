@@ -111,6 +111,7 @@ async def test_text_translation(translator: LiteLLMTranslator, mock_completion):
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -137,6 +138,7 @@ async def test_image_translation(
         source_lang="en",
         target_lang="es",
         content=image_path.read_bytes(),
+        context=None,
         content_type="image/png",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -158,6 +160,7 @@ async def test_streaming_translation(
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -187,6 +190,7 @@ async def test_translation_error_handling(translator: LiteLLMTranslator, monkeyp
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -204,6 +208,7 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         source_lang="en",
         target_lang="es",
         content="",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -220,6 +225,7 @@ async def test_empty_content(translator: LiteLLMTranslator, mock_completion):
         source_lang="en",
         target_lang="es",
         content="   \n   ",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -240,13 +246,15 @@ async def test_long_content(translator: LiteLLMTranslator, mock_completion):
         source_lang="en",
         target_lang="es",
         content=long_text,
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
     )
 
     response = await translator.translate(request)
-    assert response.text == "Translated text"
+    # Should preserve the trailing space from the original long_text
+    assert response.text == "Translated text "
 
 
 @pytest.mark.asyncio
@@ -257,6 +265,7 @@ async def test_special_characters(translator: LiteLLMTranslator, mock_completion
         source_lang="en",
         target_lang="es",
         content=special_text,
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -273,6 +282,7 @@ async def test_invalid_model_params(translator: LiteLLMTranslator, mock_completi
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet", "invalid_param": "value"},
@@ -290,6 +300,7 @@ async def test_malformed_image(translator: LiteLLMTranslator, mock_completion):
         source_lang="en",
         target_lang="es",
         content=invalid_image_data,
+        context=None,
         content_type="image/png",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -317,6 +328,7 @@ async def test_timeout_handling(translator: LiteLLMTranslator, monkeypatch):
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -342,6 +354,7 @@ async def test_rate_limit_handling(translator: LiteLLMTranslator, monkeypatch):
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -361,6 +374,7 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         source_lang="invalid",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -376,6 +390,7 @@ async def test_invalid_language_codes(translator: LiteLLMTranslator, mock_comple
         source_lang="en",
         target_lang="invalid",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -394,6 +409,7 @@ async def test_auto_language_detection(translator: LiteLLMTranslator, mock_compl
         source_lang="auto",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -415,6 +431,7 @@ async def test_mixed_content_handling(translator: LiteLLMTranslator, mock_comple
         source_lang="en",
         target_lang="es",
         content=mixed_content,
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -449,6 +466,7 @@ async def test_response_validation(translator: LiteLLMTranslator, monkeypatch):
         source_lang="en",
         target_lang="es",
         content="Hello, world!",
+        context=None,
         content_type="text/plain",
         model=ModelType.ANTHROPIC,
         model_params={"model_name": "claude-3-sonnet"},
@@ -456,3 +474,112 @@ async def test_response_validation(translator: LiteLLMTranslator, monkeypatch):
 
     with pytest.raises(TranslationError, match="No response from model"):
         await translator.translate(request)
+
+
+@pytest.mark.asyncio
+async def test_whitespace_preservation_simple(translator: LiteLLMTranslator, mock_completion):
+    """Test simple whitespace preservation."""
+    request = TranslationRequest(
+        source_lang="en",
+        target_lang="es",
+        content="   Hello, world!   ",
+        context=None,
+        content_type="text/plain",
+        model=ModelType.ANTHROPIC,
+        model_params={"model_name": "claude-3-sonnet"},
+    )
+
+    response = await translator.translate(request)
+    # Should preserve leading and trailing whitespace
+    assert response.text == "   Translated text   "
+    assert response.tokens_used == 10
+    assert response.cost == 0.001
+    assert response.time_taken > 0
+
+
+@pytest.mark.asyncio
+async def test_whitespace_preservation_complex(translator: LiteLLMTranslator, mock_completion):
+    """Test complex whitespace preservation with newlines."""
+    request = TranslationRequest(
+        source_lang="en",
+        target_lang="es",
+        content="\n\n  Hello, world!\n  ",
+        context=None,
+        content_type="text/plain",
+        model=ModelType.ANTHROPIC,
+        model_params={"model_name": "claude-3-sonnet"},
+    )
+
+    response = await translator.translate(request)
+    # Should preserve complex whitespace patterns
+    assert response.text == "\n\n  Translated text\n  "
+    assert response.tokens_used == 10
+    assert response.cost == 0.001
+    assert response.time_taken > 0
+
+
+@pytest.mark.asyncio
+async def test_context_handling(translator: LiteLLMTranslator, mock_completion):
+    """Test context handling in prompt construction."""
+    context_info = "[PREVIOUS_SOURCE]\nPrevious text\n[/PREVIOUS_SOURCE]\n\n[PREVIOUS_TRANSLATION]\nTexto anterior\n[/PREVIOUS_TRANSLATION]\n\nUse this context to maintain consistency in terminology and style."
+    
+    request = TranslationRequest(
+        source_lang="en",
+        target_lang="es",
+        content="Current text",
+        context=context_info,
+        content_type="text/plain",
+        model=ModelType.ANTHROPIC,
+        model_params={"model_name": "claude-3-sonnet"},
+    )
+
+    response = await translator.translate(request)
+    assert response.text == "Translated text"
+    assert response.tokens_used == 10
+    assert response.cost == 0.001
+    assert response.time_taken > 0
+
+
+@pytest.mark.asyncio
+async def test_context_without_context(translator: LiteLLMTranslator, mock_completion):
+    """Test translation without context (context=None)."""
+    request = TranslationRequest(
+        source_lang="en",
+        target_lang="es",
+        content="Hello, world!",
+        context=None,
+        content_type="text/plain",
+        model=ModelType.ANTHROPIC,
+        model_params={"model_name": "claude-3-sonnet"},
+    )
+
+    response = await translator.translate(request)
+    assert response.text == "Translated text"
+    assert response.tokens_used == 10
+    assert response.cost == 0.001
+    assert response.time_taken > 0
+
+
+@pytest.mark.asyncio
+async def test_whitespace_preservation_streaming(translator: LiteLLMTranslator, mock_streaming_completion):
+    """Test whitespace preservation in streaming mode."""
+    request = TranslationRequest(
+        source_lang="en",
+        target_lang="es",
+        content="  Hello, world!  ",
+        context=None,
+        content_type="text/plain",
+        model=ModelType.ANTHROPIC,
+        model_params={"model_name": "claude-3-sonnet"},
+    )
+
+    responses = []
+    async for chunk in await translator.translate(request, stream=True):
+        responses.append(chunk)
+    
+    # The final response should have whitespace preserved
+    final_response = responses[-1]
+    assert final_response.text == "  Translated text  "
+    assert final_response.tokens_used == 10
+    assert final_response.cost == 0.001
+    assert final_response.time_taken > 0

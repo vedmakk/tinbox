@@ -202,6 +202,7 @@ async def translate_page_by_page(
                     source_lang=config.source_lang,
                     target_lang=config.target_lang,
                     content=page,
+                    context=None,  # No context for page-by-page algorithm
                     content_type=content.content_type,
                     model=config.model,
                     model_params={"model_name": config.model_name}
@@ -353,6 +354,7 @@ async def translate_sliding_window(
                 source_lang=config.source_lang,
                 target_lang=config.target_lang,
                 content=window,
+                context=None,  # No context for sliding-window algorithm
                 content_type="text/plain",
                 model=config.model,
                 model_params={"model_name": config.model_name}
@@ -698,36 +700,32 @@ def smart_text_split(
 
     return chunks
 
-
-def build_translation_context(
+def build_translation_context_info(
     source_lang: str,
     target_lang: str,
-    current_chunk: str,
     previous_chunk: Optional[str] = None,
     previous_translation: Optional[str] = None,
-) -> str:
-    """Build translation context with previous chunk and translation for better consistency.
+) -> Optional[str]:
+    """Build context information for translation consistency using tag-based notation.
 
     Args:
         source_lang: Source language code
         target_lang: Target language code  
-        current_chunk: Current chunk to translate
         previous_chunk: Previous chunk (for context)
         previous_translation: Previous translation (for consistency)
 
     Returns:
-        Formatted translation prompt with context
+        Context information string, or None if no context available
     """
-    context = f"Translate the following text from {source_lang} to {target_lang}.\n\n"
+    if not previous_chunk or not previous_translation:
+        return None
 
-    if previous_chunk and previous_translation:
-        context += f"[PREVIOUS_SOURCE]{previous_chunk}[/PREVIOUS_SOURCE]\n\n"
-        context += f"[PREVIOUS_TRANSLATION]{previous_translation}[/PREVIOUS_TRANSLATION]\n\n"
+    context_parts = []
+    context_parts.append(f"[PREVIOUS_SOURCE]\n{previous_chunk}\n[/PREVIOUS_SOURCE]")
+    context_parts.append(f"[PREVIOUS_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_TRANSLATION]")
+    context_parts.append("Use this context to maintain consistency in terminology and style.")
 
-    context += f"[TRANSLATE_THIS]{current_chunk}[/TRANSLATE_THIS]\n\n"
-    context += "Only return the translation of the text between [TRANSLATE_THIS] tags (including ALL markup/formatting and line-breaks). Do not include the tags or any other content."
-
-    return context
+    return "\n\n".join(context_parts)
 
 
 async def translate_context_aware(
@@ -801,20 +799,20 @@ async def translate_context_aware(
         for i, current_chunk in enumerate(chunks[len(translated_chunks):], len(translated_chunks)):
             logger.debug(f"Translating chunk {i + 1}/{len(chunks)}")
             
-            # Build context for this chunk
-            context_content = build_translation_context(
+            # Build context information for this chunk
+            context_info = build_translation_context_info(
                 source_lang=config.source_lang,
                 target_lang=config.target_lang,
-                current_chunk=current_chunk,
                 previous_chunk=previous_chunk,
                 previous_translation=previous_translation,
             )
 
-            # Create translation request
+            # Create translation request with separate content and context
             request = TranslationRequest(
                 source_lang=config.source_lang,
                 target_lang=config.target_lang,
-                content=context_content,
+                content=current_chunk,  # Pure content only
+                context=context_info,   # Separate context
                 content_type="text/plain",
                 model=config.model,
                 model_params={"model_name": config.model_name}

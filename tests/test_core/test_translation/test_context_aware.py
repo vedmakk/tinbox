@@ -7,7 +7,7 @@ import pytest
 
 from tinbox.core.processor import DocumentContent
 from tinbox.core.translation.algorithms import (
-    build_translation_context,
+    build_translation_context_info,
     smart_text_split,
     translate_context_aware,
 )
@@ -26,26 +26,14 @@ def mock_translator():
     translator = AsyncMock(spec=ModelInterface)
 
     async def mock_translate(request, stream=False):
-        # Extract the content between [TRANSLATE_THIS] tags
+        # Handle the new structure where content is pure and context is separate
         content = request.content
-        if "[TRANSLATE_THIS]" in content and "[/TRANSLATE_THIS]" in content:
-            start = content.find("[TRANSLATE_THIS]") + len("[TRANSLATE_THIS]")
-            end = content.find("[/TRANSLATE_THIS]")
-            actual_content = content[start:end].strip()
-            return TranslationResponse(
-                text=f"Translated: {actual_content}",
-                tokens_used=len(actual_content.split()) * 2,  # Simulate token usage
-                cost=0.001,
-                time_taken=0.1,
-            )
-        else:
-            # Fallback for content without tags
-            return TranslationResponse(
-                text=f"Translated: {content}",
-                tokens_used=len(content.split()) * 2,
-                cost=0.001,
-                time_taken=0.1,
-            )
+        return TranslationResponse(
+            text=f"Translated: {content}",
+            tokens_used=len(content.split()) * 2 if isinstance(content, str) else 10,
+            cost=0.001,
+            time_taken=0.1,
+        )
 
     translator.translate = AsyncMock(side_effect=mock_translate)
     return translator
@@ -161,61 +149,58 @@ class TestSmartTextSplit:
         assert all(len(chunk) <= 10 for chunk in result)
 
 
-class TestBuildTranslationContext:
-    """Test translation context building."""
+class TestBuildTranslationContextInfo:
+    """Test translation context information building."""
 
-    def test_build_context_without_previous(self):
-        """Test building context for first chunk (no previous context)."""
-        context = build_translation_context(
+    def test_build_context_info_without_previous(self):
+        """Test building context info for first chunk (no previous context)."""
+        context = build_translation_context_info(
             source_lang="en",
             target_lang="fr",
-            current_chunk="Hello world",
         )
 
-        assert "Translate the following text from en to fr" in context
-        assert "[TRANSLATE_THIS]" in context
-        assert "Hello world" in context
-        assert "[/TRANSLATE_THIS]" in context
-        assert "Only return the translation" in context
-        assert "[PREVIOUS_SOURCE]" not in context
-        assert "[PREVIOUS_TRANSLATION]" not in context
+        assert context is None
 
-    def test_build_context_with_previous(self):
-        """Test building context with previous chunk and translation."""
-        context = build_translation_context(
+    def test_build_context_info_with_previous(self):
+        """Test building context info with previous chunk and translation."""
+        context = build_translation_context_info(
             source_lang="en",
             target_lang="fr",
-            current_chunk="Second sentence",
             previous_chunk="First sentence",
             previous_translation="Première phrase",
         )
 
-        assert "Translate the following text from en to fr" in context
+        assert context is not None
         assert "[PREVIOUS_SOURCE]" in context
         assert "First sentence" in context
         assert "[/PREVIOUS_SOURCE]" in context
         assert "[PREVIOUS_TRANSLATION]" in context
         assert "Première phrase" in context
         assert "[/PREVIOUS_TRANSLATION]" in context
-        assert "[TRANSLATE_THIS]" in context
-        assert "Second sentence" in context
-        assert "[/TRANSLATE_THIS]" in context
+        assert "Use this context to maintain consistency" in context
 
-    def test_build_context_with_partial_previous(self):
-        """Test building context with only previous chunk (no translation)."""
-        context = build_translation_context(
+    def test_build_context_info_with_partial_previous(self):
+        """Test building context info with only previous chunk (no translation)."""
+        context = build_translation_context_info(
             source_lang="en",
             target_lang="fr",
-            current_chunk="Current text",
             previous_chunk="Previous text",
             previous_translation=None,
         )
 
-        # Should not include previous context if translation is missing
-        assert "[PREVIOUS_SOURCE]" not in context
-        assert "[PREVIOUS_TRANSLATION]" not in context
-        assert "[TRANSLATE_THIS]" in context
-        assert "Current text" in context
+        # Should return None if translation is missing
+        assert context is None
+
+        # Test with missing previous chunk
+        context = build_translation_context_info(
+            source_lang="en",
+            target_lang="fr",
+            previous_chunk=None,
+            previous_translation="Previous translation",
+        )
+
+        # Should return None if chunk is missing
+        assert context is None
 
 
 class TestTranslateContextAware:
@@ -241,13 +226,12 @@ class TestTranslateContextAware:
         # Should have one translation call
         assert mock_translator.translate.call_count == 1
         
-        # Verify the call was made with proper context structure
+        # Verify the call was made with proper structure
         call_args = mock_translator.translate.call_args[0][0]
-        assert "[TRANSLATE_THIS]" in call_args.content
-        assert "Short text that fits in one chunk." in call_args.content
+        assert call_args.content == "Short text that fits in one chunk."
         
-        # Should not have previous context for first chunk
-        assert "[PREVIOUS_SOURCE]" not in call_args.content
+        # Should not have context for first chunk
+        assert call_args.context is None
 
         # Verify result
         assert result.text
@@ -277,17 +261,16 @@ class TestTranslateContextAware:
         # Should have multiple translation calls
         assert mock_translator.translate.call_count >= 2
 
-        # First call should not have previous context
+        # First call should not have context
         first_call = mock_translator.translate.call_args_list[0][0][0]
-        assert "[TRANSLATE_THIS]" in first_call.content
-        assert "[PREVIOUS_SOURCE]" not in first_call.content
+        assert first_call.context is None
 
-        # Second call should have previous context
+        # Second call should have context
         if mock_translator.translate.call_count > 1:
             second_call = mock_translator.translate.call_args_list[1][0][0]
-            assert "[TRANSLATE_THIS]" in second_call.content
-            assert "[PREVIOUS_SOURCE]" in second_call.content
-            assert "[PREVIOUS_TRANSLATION]" in second_call.content
+            assert second_call.context is not None
+            assert "[PREVIOUS_SOURCE]" in second_call.context
+            assert "[PREVIOUS_TRANSLATION]" in second_call.context
 
         # Verify result
         assert result.text
@@ -320,9 +303,9 @@ class TestTranslateContextAware:
 
         # Verify each call contains the expected content
         calls = mock_translator.translate.call_args_list
-        assert "First part" in calls[0][0][0].content
-        assert "Second part" in calls[1][0][0].content
-        assert "Third part" in calls[2][0][0].content
+        assert calls[0][0][0].content == "First part"
+        assert calls[1][0][0].content == "Second part"
+        assert calls[2][0][0].content == "Third part"
 
         # Verify result
         assert result.text
@@ -380,21 +363,11 @@ class TestTranslateContextAware:
             metadata={},
         )
 
-        # Mock translator to handle context format
+        # Mock translator to handle new structure
         def mock_context_translate(request):
-            content_text = request.content
-            if "[TRANSLATE_THIS]" in content_text and "[/TRANSLATE_THIS]" in content_text:
-                start = content_text.find("[TRANSLATE_THIS]") + len("[TRANSLATE_THIS]")
-                end = content_text.find("[/TRANSLATE_THIS]")
-                actual_content = content_text[start:end].strip()
-                return TranslationResponse(
-                    text=f"Translated: {actual_content}",
-                    tokens_used=10,
-                    cost=0.01,
-                    time_taken=0.1,
-                )
+            content = request.content
             return TranslationResponse(
-                text="Translated chunk",
+                text=f"Translated: {content}",
                 tokens_used=10,
                 cost=0.01,
                 time_taken=0.1,
@@ -480,13 +453,12 @@ class TestTranslateContextAware:
         assert result.text
         assert "Translated:" in result.text
 
-        # Verify the combined text was processed (should be in context format)
+        # Verify the combined text was processed
         first_call = mock_translator.translate.call_args_list[0][0][0]
-        # The first chunk should be wrapped in context tags
-        assert "[TRANSLATE_THIS]" in first_call.content
-        assert "[/TRANSLATE_THIS]" in first_call.content
-        assert "First page content." in first_call.content
-        assert "Second page content." in first_call.content
+        # The content should contain the combined pages
+        combined_content = first_call.content
+        assert "First page content." in combined_content
+        assert "Second page content." in combined_content
 
     async def test_translate_without_checkpoint_manager(
         self, context_aware_config, mock_translator

@@ -23,6 +23,7 @@ from tinbox.core.translation.interface import (
     TranslationResponse,
 )
 from tinbox.core.types import ModelType
+from tinbox.utils.chunks import extract_whitespace_formatting
 from tinbox.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -98,7 +99,7 @@ class LiteLLMTranslator(ModelInterface):
             raise TranslationError(f"Unsupported model provider: {request.model}")
 
     def _create_prompt(self, request: TranslationRequest) -> list[dict]:
-        """Create the prompt for the model.
+        """Create the prompt for the model with context support.
 
         Args:
             request: The translation request
@@ -112,8 +113,8 @@ class LiteLLMTranslator(ModelInterface):
                 "content": (
                     f"You are a professional translator. Translate the following content "
                     f"from {request.source_lang} to {request.target_lang}. "
-                    f"Maintain the original formatting and structure (including whitespaces, line breaks, and any prefixing or suffixing spaces or line breaks). "
-                    f"Include ALL markup/formatting and line-breaks in the translation. But do not fix tags or formatting errors - you only receive chunks of text to translate and later chunks might contain the 'missing' tags."
+                    f"Maintain the original formatting and structure (including whitespaces, line breaks, etc.). "
+                    f"Include ALL markup/formatting in the translation. But do not fix tags or formatting errors - you only receive chunks of text to translate and later chunks might contain the 'missing' tags."
                     f"Translate only the content, do not add any explanations or notes. "
                     f"Do not add any commentary or notes to the translation. It is extremely "
                     f"important that the only output you give is the translation of the content."
@@ -122,12 +123,23 @@ class LiteLLMTranslator(ModelInterface):
             }
         ]
 
+        # Add context if provided (with tag-based notation)
+        if request.context:
+            messages.append({
+                "role": "user",
+                "content": f"[TRANSLATION_CONTEXT]{request.context}[/TRANSLATION_CONTEXT]"
+            })
+
         if request.content_type.startswith("text/"):
             # Text content
             messages.append(
                 {
                     "role": "user",
-                    "content": f"{request.content}\n\nTranslation without commentary:",
+                    "content": (
+                        f"[TRANSLATE_THIS]{request.content}[/TRANSLATE_THIS]\n\n"
+                        f"Only return the translation of the text between [TRANSLATE_THIS] tags (including ALL markup/formatting and line-breaks). "
+                        f"Do not include the tags or any other content. Translation without commentary:"
+                    ),
                 }
             )
         else:
@@ -193,7 +205,7 @@ class LiteLLMTranslator(ModelInterface):
         request: TranslationRequest,
         stream: bool = False,
     ) -> Union[TranslationResponse, AsyncIterator[TranslationResponse]]:
-        """Translate content using LiteLLM.
+        """Translate content using LiteLLM with whitespace preservation.
 
         Args:
             request: The translation request configuration
@@ -224,6 +236,24 @@ class LiteLLMTranslator(ModelInterface):
                     time_taken=time_taken,
                 )
 
+            # Extract whitespace from content
+            content_prefix, clean_content, content_suffix = extract_whitespace_formatting(request.content)
+
+            logger.debug("Content prefix: ", prefix=content_prefix)
+            logger.debug("Content suffix: ", suffix=content_suffix)
+            logger.debug("Clean content: ", content=clean_content)
+
+            # Create updated request with clean content
+            clean_request = TranslationRequest(
+                source_lang=request.source_lang,
+                target_lang=request.target_lang,
+                content=clean_content,
+                context=request.context,
+                content_type=request.content_type,
+                model=request.model,
+                model_params=request.model_params,
+            )
+
             # Validate language codes (2 or 3 letter codes, or 'auto' for source)
             if request.source_lang != "auto" and (not request.source_lang.isalpha() or len(request.source_lang) not in [
                 2,
@@ -239,14 +269,14 @@ class LiteLLMTranslator(ModelInterface):
             # Validate image content
             if request.content_type.startswith("image/"):
                 try:
-                    Image.open(io.BytesIO(request.content))
+                    Image.open(io.BytesIO(clean_content))
                 except Exception as e:
                     raise TranslationError(
                         "Translation failed: Invalid image data"
                     ) from e
 
             if stream:
-                # For streaming, return an async generator
+                # Handle streaming with final whitespace restoration
                 async def response_generator() -> AsyncIterator[TranslationResponse]:
                     total_tokens = 0
                     accumulated_text = ""
@@ -254,7 +284,7 @@ class LiteLLMTranslator(ModelInterface):
 
                     try:
                         response = await self._make_completion_request(
-                            request, stream=True
+                            clean_request, stream=True
                         )
 
                         async for chunk in response:
@@ -285,24 +315,37 @@ class LiteLLMTranslator(ModelInterface):
                             # Calculate time taken
                             time_taken = (datetime.now() - start_time).total_seconds()
 
+                            # Yield intermediate response without whitespace restoration
                             yield TranslationResponse(
                                 text=accumulated_text,
                                 tokens_used=total_tokens,
                                 cost=total_cost,
                                 time_taken=time_taken,
                             )
+                        
+                        # Final response with whitespace restoration
+                        final_text = content_prefix + accumulated_text + content_suffix
+                        final_time_taken = (datetime.now() - start_time).total_seconds()
+                        
+                        yield TranslationResponse(
+                            text=final_text,
+                            tokens_used=total_tokens,
+                            cost=total_cost,
+                            time_taken=final_time_taken,
+                        )
+                        
                     except Exception as e:
                         self._logger.error(f"Streaming failed: {str(e)}")
                         raise TranslationError(f"Streaming failed: {str(e)}") from e
 
                 return response_generator()
             else:
-                # For non-streaming, make a single request
+                # Handle non-streaming with whitespace restoration
                 try:
-                    logger.debug(f"Making completion request", request=request)
+                    logger.debug(f"Making completion request", request=clean_request)
 
                     response = await self._make_completion_request(
-                        request, stream=False
+                        clean_request, stream=False
                     )
                     
                     logger.debug(f"Completion request made", response=response)
@@ -341,8 +384,13 @@ class LiteLLMTranslator(ModelInterface):
                     # Calculate time taken
                     time_taken = (datetime.now() - start_time).total_seconds()
 
+                    # Restore whitespace
+                    final_text = content_prefix + text + content_suffix
+
+                    logger.debug("Final text: ", final_text=final_text)
+
                     return TranslationResponse(
-                        text=text,
+                        text=final_text,
                         tokens_used=tokens,
                         cost=cost,
                         time_taken=time_taken,
