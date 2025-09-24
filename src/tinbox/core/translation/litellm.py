@@ -112,7 +112,8 @@ class LiteLLMTranslator(ModelInterface):
                 "content": (
                     f"You are a professional translator. Translate the following content "
                     f"from {request.source_lang} to {request.target_lang}. "
-                    f"Maintain the original formatting and structure (including whitespaces, line breaks, and any prefixing or suffixing spaces). "
+                    f"Maintain the original formatting and structure (including whitespaces, line breaks, and any prefixing or suffixing spaces or line breaks). "
+                    f"Include ALL markup/formatting and line-breaks in the translation. But do not fix tags or formatting errors - you only receive chunks of text to translate and later chunks might contain the 'missing' tags."
                     f"Translate only the content, do not add any explanations or notes. "
                     f"Do not add any commentary or notes to the translation. It is extremely "
                     f"important that the only output you give is the translation of the content."
@@ -298,9 +299,13 @@ class LiteLLMTranslator(ModelInterface):
             else:
                 # For non-streaming, make a single request
                 try:
+                    logger.debug(f"Making completion request", request=request)
+
                     response = await self._make_completion_request(
                         request, stream=False
                     )
+                    
+                    logger.debug(f"Completion request made", response=response)
 
                     if not hasattr(response, "choices") or not response.choices:
                         raise TranslationError("No response from model")

@@ -721,11 +721,11 @@ def build_translation_context(
     context = f"Translate the following text from {source_lang} to {target_lang}.\n\n"
 
     if previous_chunk and previous_translation:
-        context += f"[PREVIOUS_SOURCE]\n{previous_chunk}\n[/PREVIOUS_SOURCE]\n\n"
-        context += f"[PREVIOUS_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_TRANSLATION]\n\n"
+        context += f"[PREVIOUS_SOURCE]{previous_chunk}[/PREVIOUS_SOURCE]\n\n"
+        context += f"[PREVIOUS_TRANSLATION]{previous_translation}[/PREVIOUS_TRANSLATION]\n\n"
 
-    context += f"[TRANSLATE_THIS]\n{current_chunk}\n[/TRANSLATE_THIS]\n\n"
-    context += "Only return the translation of the text between [TRANSLATE_THIS] tags. Do not include the tags or any other content."
+    context += f"[TRANSLATE_THIS]{current_chunk}[/TRANSLATE_THIS]\n\n"
+    context += "Only return the translation of the text between [TRANSLATE_THIS] tags (including ALL markup/formatting and line-breaks). Do not include the tags or any other content."
 
     return context
 
