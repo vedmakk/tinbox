@@ -180,8 +180,8 @@ def estimate_cost(
     estimated_total_tokens = input_tokens + output_tokens
 
     # Estimate time (very rough estimate)
-    # Assume 65 tokens/second for cloud models, 20 tokens/second for local
-    tokens_per_second = 20 if model == ModelType.OLLAMA else 65
+    # Assume 30 tokens/second for cloud models, 20 tokens/second for local
+    tokens_per_second = 20 if model == ModelType.OLLAMA else 30
     estimated_time = output_tokens / tokens_per_second
 
     warnings = []
