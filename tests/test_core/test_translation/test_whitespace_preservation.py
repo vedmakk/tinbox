@@ -77,9 +77,7 @@ class TestWhitespacePreservationEndToEnd:
         """Mock completion that simulates LLM stripping whitespace."""
         def mock_completion(*args, **kwargs):
             # Simulate LLM returning content without whitespace
-            class Parsed:
-                translation = "Translated text"
-                glossary_extension = None
+            response_content = '{"translation": "Translated text", "glossary_extension": []}'
 
             return type(
                 "CompletionResponse",
@@ -94,7 +92,7 @@ class TestWhitespacePreservationEndToEnd:
                                 "message": type(
                                     "Message",
                                     (),
-                                    {"parsed": Parsed},  # Structured response without glossary
+                                    {"content": response_content},  # JSON response content
                                 )()
                             },
                         )

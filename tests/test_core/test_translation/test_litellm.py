@@ -27,9 +27,8 @@ def translator() -> LiteLLMTranslator:
 def mock_completion():
     """Create a mock completion response."""
     with patch("tinbox.core.translation.litellm.completion") as mock:
-        class Parsed:
-            translation = "Translated text"
-            glossary_extension = None
+        # Mock response content as JSON string (matching real LiteLLM response format)
+        response_content = '{"translation": "Translated text", "glossary_extension": []}'
 
         mock.return_value = type(
             "CompletionResponse",
@@ -44,7 +43,7 @@ def mock_completion():
                             "message": type(
                                 "Message",
                                 (),
-                                {"parsed": Parsed},
+                                {"content": response_content},
                             )()
                         },
                     )

@@ -4,6 +4,7 @@ import base64
 from datetime import datetime
 from typing import Union
 import io
+import json
 from PIL import Image
 
 from litellm import completion, completion_cost
@@ -24,7 +25,7 @@ from tinbox.core.translation.interface import (
     TranslationWithGlossaryResponse,
     TranslationWithoutGlossaryResponse,
 )
-from tinbox.core.types import ModelType
+from tinbox.core.types import ModelType, GlossaryEntry
 from tinbox.utils.chunks import extract_whitespace_formatting
 from tinbox.utils.logging import get_logger
 
@@ -303,24 +304,32 @@ class LiteLLMTranslator(ModelInterface):
                 if not hasattr(response.choices[0], "finish_reason") or not response.choices[0].finish_reason == "stop":
                     raise TranslationError(f"Invalid finish reason from model: {response.choices[0].finish_reason}, expected 'stop'")
 
-                # Require structured response
+                # Require structured response - parse JSON from content
                 text: str
                 glossary_updates = []
-                parsed = None
-
-                if hasattr(response.choices[0], "message") and hasattr(response.choices[0].message, "parsed"):
-                    parsed = response.choices[0].message.parsed
                 
-                if parsed is None:
-                    raise TranslationError("Invalid response format")
+                if not hasattr(response.choices[0], "message") or not response.choices[0].message.content:
+                    raise TranslationError("Invalid response format: missing message content")
                 
-                if not hasattr(parsed, "translation") or not parsed.translation:
-                    raise TranslationError("Missing translation in response")
+                try:
+                    parsed_content = json.loads(response.choices[0].message.content)
+                except (json.JSONDecodeError, AttributeError) as e:
+                    raise TranslationError(f"Invalid JSON response format: {str(e)}")
                 
-                text = parsed.translation
+                if not isinstance(parsed_content, dict) or "translation" not in parsed_content:
+                    raise TranslationError("Missing translation field in JSON response")
                 
-                if hasattr(parsed, "glossary_extension") and parsed.glossary_extension:
-                    glossary_updates = parsed.glossary_extension
+                text = parsed_content["translation"]
+                
+                # Parse glossary updates if present
+                if "glossary_extension" in parsed_content and parsed_content["glossary_extension"]:
+                    glossary_data = parsed_content["glossary_extension"]
+                    if isinstance(glossary_data, list):
+                        glossary_updates = [
+                            GlossaryEntry(term=entry["term"], translation=entry["translation"])
+                            for entry in glossary_data
+                            if isinstance(entry, dict) and "term" in entry and "translation" in entry
+                        ]
 
                 if not text or not text.strip():
                     raise TranslationError("No content returned from model")
@@ -346,6 +355,7 @@ class LiteLLMTranslator(ModelInterface):
                 # Restore whitespace
                 final_text = content_prefix + text + content_suffix
 
+                logger.debug("Glossary updates: ", glossary_updates=glossary_updates)
                 logger.debug("Final text: ", final_text=final_text)
 
                 return TranslationResponse(

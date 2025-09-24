@@ -10,11 +10,9 @@ from tinbox.core.types import ModelType, Glossary, GlossaryEntry
 async def test_litellm_structured_response_with_glossary():
     translator = LiteLLMTranslator()
 
-    # Mock a structured response with parsed field
+    # Mock a structured response with JSON content
     with patch("tinbox.core.translation.litellm.completion") as mock:
-        class Parsed:
-            translation = "Translated structured"
-            glossary_extension = [GlossaryEntry(term="AI", translation="IA")]
+        response_content = '{"translation": "Translated structured", "glossary_extension": [{"term": "AI", "translation": "IA"}]}'
 
         mock.return_value = type(
             "CompletionResponse",
@@ -26,7 +24,7 @@ async def test_litellm_structured_response_with_glossary():
                         (),
                         {
                             "finish_reason": "stop",
-                            "message": type("Message", (), {"parsed": Parsed})(),
+                            "message": type("Message", (), {"content": response_content})(),
                         },
                     )
                 ],
@@ -53,7 +51,7 @@ async def test_litellm_structured_response_with_glossary():
 
 
 @pytest.mark.asyncio
-async def test_litellm_raises_on_missing_parsed():
+async def test_litellm_raises_on_invalid_json():
     translator = LiteLLMTranslator()
 
     with patch("tinbox.core.translation.litellm.completion") as mock:
@@ -86,5 +84,5 @@ async def test_litellm_raises_on_missing_parsed():
             model_params={"model_name": "claude-3-sonnet"},
         )
 
-        with pytest.raises(TranslationError, match="Invalid response format"):
+        with pytest.raises(TranslationError, match="Invalid JSON response format"):
             await translator.translate(req)
