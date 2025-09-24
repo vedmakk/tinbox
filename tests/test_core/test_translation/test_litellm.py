@@ -27,6 +27,10 @@ def translator() -> LiteLLMTranslator:
 def mock_completion():
     """Create a mock completion response."""
     with patch("tinbox.core.translation.litellm.completion") as mock:
+        class Parsed:
+            translation = "Translated text"
+            glossary_extension = None
+
         mock.return_value = type(
             "CompletionResponse",
             (),
@@ -40,8 +44,8 @@ def mock_completion():
                             "message": type(
                                 "Message",
                                 (),
-                                {"content": "Translated text"},
-                            )
+                                {"parsed": Parsed},
+                            )()
                         },
                     )
                 ],
@@ -53,7 +57,7 @@ def mock_completion():
                         "cost": 0.001,
                         "completion_time": 0.5,
                     },
-                ),
+                )(),
                 "_hidden_params": {
                     "response_cost": 0.001
                 },

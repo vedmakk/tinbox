@@ -22,6 +22,7 @@ from tinbox.core.translation.checkpoint import CheckpointManager
 from tinbox.core.cost import estimate_cost
 from tinbox.core.processor import load_document
 from tinbox.core.translation import create_translator
+from tinbox.core.translation.glossary import GlossaryManager
 from tinbox.core.output import (
     OutputFormat,
     TranslationMetadata,
@@ -209,6 +210,21 @@ def translate(
         "--checkpoint-frequency",
         help="Save checkpoint every N pages/chunks (default: 1).",
     ),
+    use_glossary: bool = typer.Option(
+        False,
+        "--glossary",
+        help="Enable glossary for consistent term translations.",
+    ),
+    glossary_file: Optional[Path] = typer.Option(
+        None,
+        "--glossary-file",
+        help="Path to existing glossary file (JSON format).",
+    ),
+    save_glossary: Optional[Path] = typer.Option(
+        None,
+        "--save-glossary",
+        help="Path to save the updated glossary after translation.",
+    ),
 ) -> None:
     """Translate a document using LLMs."""
     try:
@@ -260,6 +276,7 @@ def translate(
             custom_split_token=custom_split_token,
             checkpoint_dir=checkpoint_dir,
             checkpoint_frequency=checkpoint_frequency,
+            use_glossary=use_glossary,
         )
 
         # Load document
@@ -272,6 +289,14 @@ def translate(
         checkpoint_manager = None
         if config.checkpoint_dir:
             checkpoint_manager = CheckpointManager(config)
+
+        # Initialize glossary manager
+        glossary_manager = None
+        if use_glossary:
+            if glossary_file:
+                glossary_manager = GlossaryManager.load_from_file(glossary_file)
+            else:
+                glossary_manager = GlossaryManager()
 
         # Show progress
         with Progress(
@@ -291,6 +316,7 @@ def translate(
                     translator=translator,
                     progress=progress,
                     checkpoint_manager=checkpoint_manager,
+                    glossary_manager=glossary_manager,
                 )
             )
 
@@ -319,6 +345,10 @@ def translate(
         # Get appropriate output handler
         handler = create_handler(output_format)
         handler.write(output, output_file)
+
+        # Save glossary if requested
+        if glossary_manager and save_glossary:
+            glossary_manager.save_to_file(save_glossary)
 
         # Clean up checkpoints after successful output
         if checkpoint_manager:

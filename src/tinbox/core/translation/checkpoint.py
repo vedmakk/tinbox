@@ -1,7 +1,7 @@
 """Checkpoint management for translation tasks."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict, Any
@@ -25,6 +25,8 @@ class TranslationState:
     token_usage: int
     cost: float
     time_taken: float
+    # Glossary state: mapping term -> translation
+    glossary_entries: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -36,6 +38,8 @@ class ResumeResult:
     total_tokens: int
     total_cost: float
     metadata: Dict[str, Any]
+    # Glossary state carried on resume
+    glossary_entries: Dict[str, str] = field(default_factory=dict)
 
 
 class CheckpointManager:
@@ -84,6 +88,7 @@ class CheckpointManager:
                 "token_usage": state.token_usage,
                 "cost": state.cost,
                 "time_taken": state.time_taken,
+                "glossary_entries": state.glossary_entries,
                 "config": {
                     "source_lang": self.config.source_lang,
                     "target_lang": self.config.target_lang,
@@ -153,6 +158,7 @@ class CheckpointManager:
                 except (ValueError, TypeError):
                     translated_chunks[key] = value
 
+            glossary_entries = data.get("glossary_entries", {})
             state = TranslationState(
                 source_lang=data["source_lang"],
                 target_lang=data["target_lang"],
@@ -163,6 +169,7 @@ class CheckpointManager:
                 token_usage=data["token_usage"],
                 cost=data["cost"],
                 time_taken=data["time_taken"],
+                glossary_entries=glossary_entries,
             )
 
             self._logger.debug(
@@ -248,7 +255,8 @@ async def resume_from_checkpoint(
             translated_items=[],
             total_tokens=0,
             total_cost=0.0,
-            metadata={}
+            metadata={},
+            glossary_entries={},
         )
         
     logger.info("Checking for checkpoint")
@@ -260,7 +268,8 @@ async def resume_from_checkpoint(
             translated_items=[],
             total_tokens=0,
             total_cost=0.0,
-            metadata={}
+            metadata={},
+            glossary_entries={},
         )
         
     logger.debug("Found valid checkpoint, resuming from saved state", checkpoint=checkpoint)
@@ -289,7 +298,8 @@ async def resume_from_checkpoint(
         translated_items=translated_items,
         total_tokens=checkpoint.token_usage,
         total_cost=checkpoint.cost,
-        metadata=metadata
+        metadata=metadata,
+        glossary_entries=getattr(checkpoint, "glossary_entries", {}),
     )
     
     logger.info(f"Resumed with {len(translated_items)} completed items")

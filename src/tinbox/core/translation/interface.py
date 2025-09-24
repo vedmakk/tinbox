@@ -1,10 +1,10 @@
 """Translation interface definitions."""
 
-from typing import Optional, Protocol, Union
+from typing import Optional, Protocol, Union, List
 
 from pydantic import BaseModel, Field, ConfigDict
 
-from tinbox.core.types import ModelType
+from tinbox.core.types import ModelType, Glossary, GlossaryEntry
 
 
 class TranslationError(Exception):
@@ -25,6 +25,10 @@ class TranslationRequest(BaseModel):
     model_params: dict = Field(
         default_factory=dict
     )  # Additional model-specific parameters
+    glossary: Optional[Glossary] = Field(
+        default=None,
+        description="Optional glossary for consistent translations",
+    )
 
     model_config = ConfigDict(frozen=True, protected_namespaces=())
 
@@ -36,6 +40,10 @@ class TranslationResponse(BaseModel):
     tokens_used: int = Field(ge=0)
     cost: float = Field(ge=0.0)
     time_taken: float = Field(ge=0.0)
+    glossary_updates: List[GlossaryEntry] = Field(
+        default_factory=list,
+        description="New glossary entries discovered during this translation",
+    )
 
     model_config = ConfigDict(frozen=True)
 
@@ -67,3 +75,23 @@ class ModelInterface(Protocol):
             True if the model is available and configured correctly
         """
         ...
+
+
+class TranslationWithGlossaryResponse(BaseModel):
+    """Structured LLM response when glossary is enabled."""
+
+    translation: str = Field(description="The translated text")
+    glossary_extension: Optional[List[GlossaryEntry]] = Field(
+        default=None,
+        description="New glossary entries discovered during translation (optional)",
+    )
+
+    model_config = ConfigDict(frozen=True)
+
+
+class TranslationWithoutGlossaryResponse(BaseModel):
+    """Structured LLM response when glossary is not enabled."""
+
+    translation: str = Field(description="The translated text")
+
+    model_config = ConfigDict(frozen=True)

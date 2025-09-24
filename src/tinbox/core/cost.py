@@ -138,6 +138,7 @@ def estimate_cost(
     *,
     algorithm: str = "page",
     max_cost: Optional[float] = None,
+    glossary_terms: int = 0,
 ) -> CostEstimate:
     """Estimate the cost of translating a document.
 
@@ -161,6 +162,11 @@ def estimate_cost(
         # For page and sliding-window algorithms, input and output tokens are roughly equal
         input_tokens = estimated_tokens
         output_tokens = estimated_tokens
+    
+    # Add glossary overhead: assume ~4 tokens per term on average (term, arrow, translation)
+    if glossary_terms > 0:
+        glossary_overhead_tokens = glossary_terms * 4
+        input_tokens += glossary_overhead_tokens
     
     input_cost = (input_tokens / 1000) * input_cost_per_1k
     output_cost = (output_tokens / 1000) * output_cost_per_1k
@@ -187,6 +193,11 @@ def estimate_cost(
                 f"Context-aware algorithm uses additional input tokens for context "
                 f"(+{context_overhead:,} tokens, ~80% overhead). "
                 f"This improves translation quality but increases cost."
+            )
+
+        if glossary_terms > 0:
+            warnings.append(
+                f"Glossary enabled with {glossary_terms} terms adds input token overhead (~{glossary_terms * 4:,} tokens)."
             )
 
         if max_cost and estimated_cost > max_cost:

@@ -1023,33 +1023,33 @@ All tests should pass.
 
 ## Implementation Status
 
-⏳ **PENDING** - Design has been completed and implementation is ready to begin.
+✅ **IN PROGRESS** - Implementation underway. Core types, interface, LiteLLM integration, algorithms, checkpointing, CLI, and cost estimation updated. Tests and doc polish pending.
 
 ### Implementation Checklist
 
-- [ ] **Phase 1: Core Data Structures and Types**
-  - [ ] Update TranslationConfig type definitions
-  - [ ] Enhance translation interface
-  - [ ] Create glossary manager
-- [ ] **Phase 2: LiteLLM Integration**
-  - [ ] Enhance LiteLLM translator
-  - [ ] Add response format support
-- [ ] **Phase 3: Algorithm Integration**
-  - [ ] Update page-by-page algorithm
-  - [ ] Update sliding-window algorithm
-  - [ ] Update context-aware algorithm
-  - [ ] Update main translation router
-- [ ] **Phase 4: Checkpoint System Integration**
-  - [ ] Enhance checkpoint data structure
-  - [ ] Update checkpoint manager
-- [ ] **Phase 5: CLI Integration**
-  - [ ] Add CLI parameters
-  - [ ] Update configuration building
-  - [ ] Enhance cost estimation
-  - [ ] Update documentation
+- [x] **Phase 1: Core Data Structures and Types**
+  - [x] Update TranslationConfig type definitions (added `use_glossary`, `initial_glossary`, `Glossary`, `GlossaryEntry`)
+  - [x] Enhance translation interface (added `glossary` on `TranslationRequest`, `glossary_updates` on `TranslationResponse`, structured response models)
+  - [x] Create glossary manager (`src/tinbox/core/translation/glossary.py` with load/save/update)
+- [x] **Phase 2: LiteLLM Integration**
+  - [x] Enhance LiteLLM translator (glossary context included in prompt)
+  - [x] Add response format support (conditional `response_format` and structured parsing with fallback)
+- [x] **Phase 3: Algorithm Integration**
+  - [x] Update page-by-page algorithm (passes glossary, processes `glossary_updates`)
+  - [x] Update sliding-window algorithm (passes glossary, processes `glossary_updates`)
+  - [x] Update context-aware algorithm (passes glossary, processes `glossary_updates`)
+  - [x] Update main translation router (added `glossary_manager` parameter)
+- [x] **Phase 4: Checkpoint System Integration**
+  - [x] Enhance checkpoint data structure (`glossary_entries` on `TranslationState`, `ResumeResult`)
+  - [x] Update checkpoint manager (save/load glossary state, resume returns glossary)
+- [x] **Phase 5: CLI Integration**
+  - [x] Add CLI parameters (`--glossary`, `--glossary-file`, `--save-glossary`)
+  - [x] Update configuration building and wire `GlossaryManager`
+  - [x] Enhance cost estimation (added glossary overhead in `core/cost.py`)
+  - [ ] Update documentation sections below (in progress)
 - [ ] **Phase 6: Testing and Validation**
-  - [ ] Create comprehensive test suite
-  - [ ] Update existing test suites
+  - [ ] Create comprehensive test suite (new tests for glossary manager and integration)
+  - [ ] Update existing test suites to cover glossary paths
   - [ ] Integration testing
 - [ ] **Phase 7: Quality Assurance**
   - [ ] Run quality checks

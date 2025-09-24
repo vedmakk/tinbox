@@ -21,6 +21,8 @@ from tinbox.core.translation.interface import (
     TranslationError,
     TranslationRequest,
     TranslationResponse,
+    TranslationWithGlossaryResponse,
+    TranslationWithoutGlossaryResponse,
 )
 from tinbox.core.types import ModelType
 from tinbox.utils.chunks import extract_whitespace_formatting
@@ -130,6 +132,17 @@ class LiteLLMTranslator(ModelInterface):
                 "content": f"[TRANSLATION_CONTEXT]{request.context}[/TRANSLATION_CONTEXT]"
             })
 
+        # Add glossary context if available
+        if request.glossary and request.glossary.entries:
+            glossary_context = (
+                "Use this glossary for consistent translations:\n"
+                f"{request.glossary.to_context_string()}\n\n"
+                "When you encounter these terms, use the provided translations exactly. "
+                "If you encounter new important terms that would benefit from consistent translation "
+                "(technical terms, proper nouns, domain vocabulary), include them in the glossary_extension field in your response."
+            )
+            messages.append({"role": "user", "content": glossary_context})
+
         if request.content_type.startswith("text/"):
             # Text content
             messages.append(
@@ -165,6 +178,8 @@ class LiteLLMTranslator(ModelInterface):
                     ],
                 }
             )
+        
+        logger.debug("Messages: ", messages=messages)
 
         return messages
 
@@ -190,6 +205,7 @@ class LiteLLMTranslator(ModelInterface):
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 stream=False,
+                response_format=TranslationWithGlossaryResponse if request.glossary else TranslationWithoutGlossaryResponse,
                 drop_params=True,
                 **{k: v for k, v in request.model_params.items() if k != "model_name"},
             )
@@ -249,6 +265,7 @@ class LiteLLMTranslator(ModelInterface):
                 content_type=request.content_type,
                 model=request.model,
                 model_params=request.model_params,
+                glossary=request.glossary,
             )
 
             # Validate language codes (2 or 3 letter codes, or 'auto' for source)
@@ -286,12 +303,24 @@ class LiteLLMTranslator(ModelInterface):
                 if not hasattr(response.choices[0], "finish_reason") or not response.choices[0].finish_reason == "stop":
                     raise TranslationError(f"Invalid finish reason from model: {response.choices[0].finish_reason}, expected 'stop'")
 
-                if not hasattr(response.choices[0], "message") or not hasattr(
-                    response.choices[0].message, "content"
-                ):
-                    raise TranslationError("Invalid response format")
+                # Require structured response
+                text: str
+                glossary_updates = []
+                parsed = None
 
-                text = response.choices[0].message.content
+                if hasattr(response.choices[0], "message") and hasattr(response.choices[0].message, "parsed"):
+                    parsed = response.choices[0].message.parsed
+                
+                if parsed is None:
+                    raise TranslationError("Invalid response format")
+                
+                if not hasattr(parsed, "translation") or not parsed.translation:
+                    raise TranslationError("Missing translation in response")
+                
+                text = parsed.translation
+                
+                if hasattr(parsed, "glossary_extension") and parsed.glossary_extension:
+                    glossary_updates = parsed.glossary_extension
 
                 if not text or not text.strip():
                     raise TranslationError("No content returned from model")
@@ -324,6 +353,7 @@ class LiteLLMTranslator(ModelInterface):
                     tokens_used=tokens,
                     cost=cost,
                     time_taken=time_taken,
+                    glossary_updates=glossary_updates,
                 )
             except TranslationError:
                 raise

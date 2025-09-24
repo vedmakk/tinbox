@@ -74,6 +74,13 @@ tinbox translate --to es document.pdf
   - **Sliding Window**: For long text documents
   - Automatic context preservation between sections
 
+### 📚 Glossary Support
+
+- **Consistent Terminology**: Maintain consistent translation of technical terms across documents
+- **Term Learning**: Automatically discover and reuse domain-specific vocabulary
+- **Persistent Glossaries**: Save and load glossaries across translation sessions
+- **Algorithm Integration**: Works with all translation algorithms (page-by-page, sliding-window, context-aware)
+
 ### 🤖 Flexible Model Support
 
 - Use powerful cloud models (GPT-4V, Claude 3.5 Sonnet)
@@ -213,9 +220,16 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
    - Cloud models (OpenAI, Anthropic, Google) for highest quality and faster processing
 
 5. **For Long-Running Translations**
+
    - Enable checkpointing to resume interrupted translations: `--checkpoint-dir ./checkpoints`
    - Adjust checkpoint frequency for very large documents: `--checkpoint-frequency 10`
    - Checkpoints automatically resume from where you left off if translation is interrupted
+
+6. **For Consistent Terminology**
+   - Enable glossary for technical documents: `--glossary`
+   - Build domain-specific glossaries: `--save-glossary terms.json`
+   - Share glossaries across projects: `--glossary-file shared_terms.json`
+   - Glossary works with all algorithms and improves translation consistency
 
 ## 📖 Detailed Documentation
 
@@ -246,6 +260,14 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
 | ------------------------ | ------------------------------------------------------- | ------- |
 | `--checkpoint-dir`       | Directory to store translation checkpoints for resuming | None    |
 | `--checkpoint-frequency` | Save checkpoint every N pages/chunks                    | 1       |
+
+#### Glossary Options
+
+| Option            | Description                                      | Example                      |
+| ----------------- | ------------------------------------------------ | ---------------------------- |
+| `--glossary`      | Enable glossary for consistent term translations | `--glossary`                 |
+| `--glossary-file` | Path to existing glossary file (JSON format)     | `--glossary-file terms.json` |
+| `--save-glossary` | Path to save updated glossary after translation  | `--save-glossary terms.json` |
 
 #### Output Format Options
 
@@ -378,9 +400,37 @@ tinbox translate --to es --format markdown document.pdf
    ```
 
 7. **Benchmarking Different Models**
+
    ```bash
    tinbox translate --to de --benchmark --model openai:gpt-4o document.pdf
    ```
+
+8. **Glossary Support for Consistent Terminology**
+
+   ```bash
+   # Enable glossary with automatic term discovery
+   tinbox translate --to es --glossary --save-glossary medical_terms.json medical_document.pdf
+
+   # Load existing glossary and extend it
+   tinbox translate --to fr --glossary-file existing_terms.json --save-glossary updated_terms.json technical_doc.pdf
+
+   # Use glossary without saving updates
+   tinbox translate --to de --glossary-file company_terms.json document.docx
+   ```
+
+### Glossary File Format
+
+Glossary files are stored in JSON format:
+
+```json
+{
+  "entries": {
+    "CPU": "Processeur",
+    "GPU": "Carte graphique",
+    "SSD": "Disque SSD"
+  }
+}
+```
 
 ## 🛠 Project Structure
 

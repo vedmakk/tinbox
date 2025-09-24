@@ -18,6 +18,8 @@ from tinbox.core.translation.checkpoint import (
     save_checkpoint,
     resume_from_checkpoint,
 )
+from tinbox.core.translation.glossary import GlossaryManager
+from tinbox.core.types import Glossary
 from tinbox.core.translation.interface import (
     ModelInterface,
     TranslationError,
@@ -100,6 +102,7 @@ async def translate_document(
     translator: ModelInterface,
     progress: Optional[Progress] = None,
     checkpoint_manager: Optional[CheckpointManager] = None,
+    glossary_manager: Optional[GlossaryManager] = None,
 ) -> TranslationResponse:
     """Translate a document using the specified algorithm.
 
@@ -123,6 +126,7 @@ async def translate_document(
             translator,
             progress,
             checkpoint_manager,
+            glossary_manager,
         )
     elif config.algorithm == "sliding-window":
         return await translate_sliding_window(
@@ -131,6 +135,7 @@ async def translate_document(
             translator,
             progress,
             checkpoint_manager,
+            glossary_manager,
         )
     elif config.algorithm == "context-aware":
         return await translate_context_aware(
@@ -139,6 +144,7 @@ async def translate_document(
             translator,
             progress,
             checkpoint_manager,
+            glossary_manager,
         )
     else:
         raise TranslationError(f"Unknown algorithm: {config.algorithm}")
@@ -150,6 +156,7 @@ async def translate_page_by_page(
     translator: ModelInterface,
     progress: Optional[Progress] = None,
     checkpoint_manager: Optional[CheckpointManager] = None,
+    glossary_manager: Optional[GlossaryManager] = None,
 ) -> TranslationResponse:
     """Translate a document page by page.
 
@@ -192,6 +199,21 @@ async def translate_page_by_page(
         # Track failed pages
         failed_pages: list[int] = []
 
+        # Restore glossary state from checkpoint if enabled
+        if config.use_glossary and glossary_manager and resume_result.glossary_entries:
+            glossary_manager.restore_from_checkpoint(resume_result.glossary_entries)
+
+        # If everything already translated via checkpoint, short-circuit
+        if translated_pages and len(translated_pages) == len(content.pages):
+            final_text = "\n\n".join(translated_pages)
+            time_taken = (datetime.now() - start_time).total_seconds()
+            return TranslationResponse(
+                text=final_text,
+                tokens_used=total_tokens,
+                cost=total_cost,
+                time_taken=time_taken,
+            )
+
         # Translate remaining pages
         for i, page in enumerate(
             content.pages[len(translated_pages) :], len(translated_pages)
@@ -208,10 +230,14 @@ async def translate_page_by_page(
                     model_params={"model_name": config.model_name}
                     if config.model_name
                     else {},
+                    glossary=glossary_manager.get_current_glossary() if config.use_glossary and glossary_manager else None,
                 )
 
                 # Translate page
                 response = await translator.translate(request)
+                # Update glossary if new terms were discovered
+                if response.glossary_updates and glossary_manager:
+                    glossary_manager.update_glossary(response.glossary_updates)
                 translated_pages.append(response.text)
                 total_tokens += response.tokens_used
                 total_cost += response.cost
@@ -238,6 +264,7 @@ async def translate_page_by_page(
                         token_usage=total_tokens,
                         cost=total_cost,
                         time_taken=(datetime.now() - start_time).total_seconds(),
+                        glossary_entries=glossary_manager.get_current_glossary().entries if glossary_manager else {},
                     )
                     await checkpoint_manager.save(state)
 
@@ -280,6 +307,7 @@ async def translate_sliding_window(
     translator: ModelInterface,
     progress: Optional[Progress] = None,
     checkpoint_manager: Optional[CheckpointManager] = None,
+    glossary_manager: Optional[GlossaryManager] = None,
 ) -> TranslationResponse:
     """Translate a document using sliding window algorithm.
 
@@ -346,6 +374,10 @@ async def translate_sliding_window(
                 completed=len(translated_windows),
             )
 
+        # Restore glossary state from checkpoint if enabled
+        if config.use_glossary and glossary_manager and resume_result.glossary_entries:
+            glossary_manager.restore_from_checkpoint(resume_result.glossary_entries)
+
         # Translate remaining windows
         for i, window in enumerate(windows[len(translated_windows):], len(translated_windows)):
             logger.debug(f"Translating window {i + 1}: {window}")
@@ -360,10 +392,14 @@ async def translate_sliding_window(
                 model_params={"model_name": config.model_name}
                 if config.model_name
                 else {},
+                glossary=glossary_manager.get_current_glossary() if config.use_glossary and glossary_manager else None,
             )
 
             # Translate window
             response = await translator.translate(request)
+            # Update glossary if new terms were discovered
+            if response.glossary_updates and glossary_manager:
+                glossary_manager.update_glossary(response.glossary_updates)
             translated_windows.append(response.text)
             total_tokens += response.tokens_used
             total_cost += response.cost
@@ -393,6 +429,7 @@ async def translate_sliding_window(
                     token_usage=total_tokens,
                     cost=total_cost,
                     time_taken=(datetime.now() - start_time).total_seconds(),
+                    glossary_entries=glossary_manager.get_current_glossary().entries if glossary_manager else {},
                 )
                 await checkpoint_manager.save(state)
 
@@ -734,6 +771,7 @@ async def translate_context_aware(
     translator: ModelInterface,
     progress: Optional[Progress] = None,
     checkpoint_manager: Optional[CheckpointManager] = None,
+    glossary_manager: Optional[GlossaryManager] = None,
 ) -> TranslationResponse:
     """Translate using context-aware algorithm with natural boundary splitting.
 
@@ -795,6 +833,10 @@ async def translate_context_aware(
                 completed=len(translated_chunks),
             )
 
+        # Restore glossary state from checkpoint if enabled
+        if config.use_glossary and glossary_manager and resume_result.glossary_entries:
+            glossary_manager.restore_from_checkpoint(resume_result.glossary_entries)
+
         # Translate remaining chunks with context
         for i, current_chunk in enumerate(chunks[len(translated_chunks):], len(translated_chunks)):
             logger.debug(f"Translating chunk {i + 1}/{len(chunks)}")
@@ -818,6 +860,7 @@ async def translate_context_aware(
                 model_params={"model_name": config.model_name}
                 if config.model_name
                 else {},
+                glossary=glossary_manager.get_current_glossary() if config.use_glossary and glossary_manager else None,
             )
 
             # Translate chunk
@@ -825,6 +868,10 @@ async def translate_context_aware(
             translated_chunks.append(response.text)
             total_tokens += response.tokens_used
             total_cost += response.cost
+
+            # Update glossary if new terms were discovered
+            if response.glossary_updates and glossary_manager:
+                glossary_manager.update_glossary(response.glossary_updates)
 
             # Update progress
             if progress and task_id is not None:
@@ -849,6 +896,7 @@ async def translate_context_aware(
                     token_usage=total_tokens,
                     cost=total_cost,
                     time_taken=(datetime.now() - start_time).total_seconds(),
+                    glossary_entries=glossary_manager.get_current_glossary().entries if glossary_manager else {},
                 )
                 await checkpoint_manager.save(state)
 
