@@ -115,13 +115,14 @@ class LiteLLMTranslator(ModelInterface):
                 "role": "system",
                 "content": (
                     f"You are a professional translator. Translate the following content "
-                    f"from {request.source_lang} to {request.target_lang}. "
+                    f"from '{request.source_lang}' to '{request.target_lang}'. "
                     f"Maintain the original formatting and structure (including whitespaces, line breaks, etc.). "
-                    f"Include ALL markup/formatting in the translation. But do not fix tags or formatting errors - you only receive chunks of text to translate and later chunks might contain the 'missing' tags."
+                    f"Include ALL markup/formatting in the translation. But do not fix tags or formatting errors - "
+                    f"you only receive chunks of text to translate and later chunks might contain the 'missing' tags. "
                     f"Translate only the content, do not add any explanations or notes. "
                     f"Do not add any commentary or notes to the translation. It is extremely "
-                    f"important that the only output you give is the translation of the content."
-                    f"Your translation should be in {request.target_lang} language."
+                    f"important that the only output you give is the translation of the content. "
+                    f"Your translation should be in '{request.target_lang}' language."
                 ),
             }
         ]
@@ -138,9 +139,10 @@ class LiteLLMTranslator(ModelInterface):
             glossary_context = (
                 "Use this glossary for consistent translations:\n"
                 f"{request.glossary.to_context_string()}\n\n"
-                "When you encounter these terms, use the provided translations exactly. "
-                "If you encounter new important terms that would benefit from consistent translation "
-                "(technical terms, proper nouns, domain vocabulary), include them in the glossary_extension field in your response."
+                "When you encounter these terms, use the provided translations. "
+                "If you encounter new important terms that benefit from consistent translation "
+                "(technical terms, proper nouns, domain vocabulary), include them in the glossary_extension field in your response. "
+                "Only include terms that are important for consistent translation."
             )
             messages.append({"role": "user", "content": glossary_context})
 
