@@ -15,7 +15,6 @@ from tinbox.core.translation.checkpoint import (
     ResumeResult,
     should_resume,
     load_checkpoint,
-    save_checkpoint,
     resume_from_checkpoint,
 )
 from tinbox.core.translation.glossary import GlossaryManager

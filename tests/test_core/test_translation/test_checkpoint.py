@@ -11,7 +11,6 @@ from tinbox.core.translation.checkpoint import (
     TranslationState,
     ResumeResult,
     load_checkpoint,
-    save_checkpoint,
     should_resume,
     resume_from_checkpoint,
 )
@@ -320,30 +319,6 @@ class TestUtilityFunctions:
             mock_manager.load.assert_called_once()
             assert result is None
 
-    async def test_save_checkpoint_no_dir(self, sample_config):
-        """Test save_checkpoint returns early when no checkpoint directory."""
-        config = sample_config.model_copy(update={"checkpoint_dir": None})
-        
-        # Should not raise an error
-        await save_checkpoint(config, ["page1", "page2"], 100, 0.01)
-
-    async def test_save_checkpoint_with_dir(self, sample_config, temp_checkpoint_dir):
-        """Test save_checkpoint creates checkpoint when directory is configured."""
-        with patch("tinbox.core.translation.checkpoint.CheckpointManager.save") as mock_save:
-            await save_checkpoint(sample_config, ["page1", "page2"], 100, 0.01)
-            
-            # Verify save was called
-            mock_save.assert_called_once()
-            
-            # Verify the state passed to save
-            call_args = mock_save.call_args[0]
-            state = call_args[0]
-            assert isinstance(state, TranslationState)
-            assert state.source_lang == "en"
-            assert state.target_lang == "es"
-            assert state.algorithm == "context-aware"
-            assert state.token_usage == 100
-            assert state.cost == 0.01
 
 
 class TestErrorHandling:

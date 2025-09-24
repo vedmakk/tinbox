@@ -306,34 +306,3 @@ async def resume_from_checkpoint(
     return result
 
 
-async def save_checkpoint(
-    config: TranslationConfig,
-    pages: list[str],
-    tokens_used: int,
-    cost: float,
-) -> None:
-    """Save translation state to checkpoint.
-
-    Args:
-        config: Translation configuration
-        pages: Translated pages
-        tokens_used: Total tokens used
-        cost: Total cost
-    """
-    if not config.checkpoint_dir:
-        return
-
-    state = TranslationState(
-        source_lang=config.source_lang,
-        target_lang=config.target_lang,
-        algorithm=config.algorithm,
-        completed_pages=[],
-        failed_pages=[],
-        translated_chunks={},
-        token_usage=tokens_used,
-        cost=cost,
-        time_taken=0.0,
-    )
-
-    manager = CheckpointManager(config)
-    await manager.save(state)
