@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, AsyncIterator
+from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -62,46 +62,6 @@ def mock_completion():
         yield mock
 
 
-@pytest.fixture
-def mock_streaming_completion():
-    """Create a mock streaming completion response."""
-
-    async def mock_stream():
-        yield type(
-            "CompletionChunk",
-            (),
-            {
-                "choices": [
-                    type(
-                        "Choice",
-                        (),
-                        {
-                            "delta": type(
-                                "Delta",
-                                (),
-                                {"content": "Translated text"},
-                            )
-                        },
-                    )
-                ],
-                "usage": type(
-                    "Usage",
-                    (),
-                    {
-                        "total_tokens": 10,
-                        "cost": 0.001,
-                        "completion_time": 0.5,
-                    },
-                ),
-                "_hidden_params": {
-                    "response_cost": 0.001
-                },
-            },
-        )
-
-    with patch("tinbox.core.translation.litellm.completion") as mock:
-        mock.return_value = mock_stream()
-        yield mock
 
 
 @pytest.mark.asyncio
@@ -149,28 +109,6 @@ async def test_image_translation(
     assert response.tokens_used == 10
     assert response.cost == 0.001
     assert response.time_taken > 0  # Real time calculation
-
-
-@pytest.mark.asyncio
-async def test_streaming_translation(
-    translator: LiteLLMTranslator, mock_streaming_completion
-):
-    """Test streaming translation responses."""
-    request = TranslationRequest(
-        source_lang="en",
-        target_lang="es",
-        content="Hello, world!",
-        context=None,
-        content_type="text/plain",
-        model=ModelType.ANTHROPIC,
-        model_params={"model_name": "claude-3-sonnet"},
-    )
-
-    async for chunk in await translator.translate(request, stream=True):
-        assert chunk.text == "Translated text"
-        assert chunk.tokens_used == 10
-        assert chunk.cost == 0.001
-        assert chunk.time_taken > 0  # Real time calculation
 
 
 @pytest.mark.asyncio
@@ -560,26 +498,3 @@ async def test_context_without_context(translator: LiteLLMTranslator, mock_compl
     assert response.time_taken > 0
 
 
-@pytest.mark.asyncio
-async def test_whitespace_preservation_streaming(translator: LiteLLMTranslator, mock_streaming_completion):
-    """Test whitespace preservation in streaming mode."""
-    request = TranslationRequest(
-        source_lang="en",
-        target_lang="es",
-        content="  Hello, world!  ",
-        context=None,
-        content_type="text/plain",
-        model=ModelType.ANTHROPIC,
-        model_params={"model_name": "claude-3-sonnet"},
-    )
-
-    responses = []
-    async for chunk in await translator.translate(request, stream=True):
-        responses.append(chunk)
-    
-    # The final response should have whitespace preserved
-    final_response = responses[-1]
-    assert final_response.text == "  Translated text  "
-    assert final_response.tokens_used == 10
-    assert final_response.cost == 0.001
-    assert final_response.time_taken > 0

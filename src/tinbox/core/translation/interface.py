@@ -1,6 +1,6 @@
 """Translation interface definitions."""
 
-from typing import AsyncIterator, Optional, Protocol, Union
+from typing import Optional, Protocol, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -46,16 +46,14 @@ class ModelInterface(Protocol):
     async def translate(
         self,
         request: TranslationRequest,
-        stream: bool = False,
-    ) -> Union[TranslationResponse, AsyncIterator[TranslationResponse]]:
+    ) -> TranslationResponse:
         """Translate content using the model.
 
         Args:
             request: The translation request configuration
-            stream: Whether to stream the response
 
         Returns:
-            Either a single response or an async iterator of responses if streaming
+            A single translation response
 
         Raises:
             TranslationError: If translation fails

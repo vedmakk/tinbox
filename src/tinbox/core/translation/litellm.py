@@ -2,7 +2,7 @@
 
 import base64
 from datetime import datetime
-from typing import AsyncIterator, Union
+from typing import Union
 import io
 from PIL import Image
 
@@ -170,13 +170,12 @@ class LiteLLMTranslator(ModelInterface):
 
     @completion_with_retry
     async def _make_completion_request(
-        self, request: TranslationRequest, stream: bool = False
+        self, request: TranslationRequest
     ):
         """Make a completion request with retry logic for rate limits.
 
         Args:
             request: The translation request
-            stream: Whether to stream the response
 
         Returns:
             The completion response
@@ -190,7 +189,7 @@ class LiteLLMTranslator(ModelInterface):
                 messages=self._create_prompt(request),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                stream=stream,
+                stream=False,
                 drop_params=True,
                 **{k: v for k, v in request.model_params.items() if k != "model_name"},
             )
@@ -203,16 +202,14 @@ class LiteLLMTranslator(ModelInterface):
     async def translate(
         self,
         request: TranslationRequest,
-        stream: bool = False,
-    ) -> Union[TranslationResponse, AsyncIterator[TranslationResponse]]:
+    ) -> TranslationResponse:
         """Translate content using LiteLLM with whitespace preservation.
 
         Args:
             request: The translation request configuration
-            stream: Whether to stream the response
 
         Returns:
-            Either a single response or an async iterator of responses if streaming
+            A single translation response
 
         Raises:
             TranslationError: If translation fails
@@ -275,131 +272,64 @@ class LiteLLMTranslator(ModelInterface):
                         "Translation failed: Invalid image data"
                     ) from e
 
-            if stream:
-                # Handle streaming with final whitespace restoration
-                async def response_generator() -> AsyncIterator[TranslationResponse]:
-                    total_tokens = 0
-                    accumulated_text = ""
-                    total_cost = 0.0
+            # Handle translation with whitespace restoration
+            try:
+                logger.debug(f"Making completion request", request=clean_request)
 
+                response = await self._make_completion_request(clean_request)
+                
+                logger.debug(f"Completion request made", response=response)
+
+                if not hasattr(response, "choices") or not response.choices:
+                    raise TranslationError("No response from model")
+
+                if not hasattr(response.choices[0], "finish_reason") or not response.choices[0].finish_reason == "stop":
+                    raise TranslationError(f"Invalid finish reason from model: {response.choices[0].finish_reason}, expected 'stop'")
+
+                if not hasattr(response.choices[0], "message") or not hasattr(
+                    response.choices[0].message, "content"
+                ):
+                    raise TranslationError("Invalid response format")
+
+                text = response.choices[0].message.content
+
+                if not text or not text.strip():
+                    raise TranslationError("No content returned from model")
+
+                # Get actual token usage from LiteLLM response
+                tokens = getattr(response.usage, "total_tokens", 0)
+                
+                # Get actual cost from LiteLLM response
+                cost = 0.0
+                if hasattr(response, "_hidden_params") and "response_cost" in response._hidden_params:
+                    cost = response._hidden_params["response_cost"]
+                else:
+                    # Fallback: calculate cost using LiteLLM's completion_cost function
                     try:
-                        response = await self._make_completion_request(
-                            clean_request, stream=True
-                        )
+                        cost = completion_cost(completion_response=response)
+                    except Exception:
+                        # If all else fails, cost remains 0.0
+                        pass
+                
+                # Calculate time taken
+                time_taken = (datetime.now() - start_time).total_seconds()
 
-                        async for chunk in response:
-                            if not hasattr(chunk, "choices") or not chunk.choices:
-                                continue
+                # Restore whitespace
+                final_text = content_prefix + text + content_suffix
 
-                            delta = chunk.choices[0].delta
-                            if not hasattr(delta, "content") or not delta.content:
-                                continue
+                logger.debug("Final text: ", final_text=final_text)
 
-                            accumulated_text += delta.content
-                            
-                            # Get actual token usage if available
-                            if hasattr(chunk, "usage") and chunk.usage:
-                                total_tokens = getattr(chunk.usage, "total_tokens", total_tokens)
-                            
-                            # Get actual cost if available
-                            if hasattr(chunk, "_hidden_params") and "response_cost" in chunk._hidden_params:
-                                total_cost = chunk._hidden_params["response_cost"]
-                            elif hasattr(chunk, "usage") and chunk.usage:
-                                # Fallback: calculate cost using LiteLLM's completion_cost function
-                                try:
-                                    total_cost = completion_cost(completion_response=chunk)
-                                except Exception:
-                                    # If calculation fails, keep previous cost
-                                    pass
-                            
-                            # Calculate time taken
-                            time_taken = (datetime.now() - start_time).total_seconds()
-
-                            # Yield intermediate response without whitespace restoration
-                            yield TranslationResponse(
-                                text=accumulated_text,
-                                tokens_used=total_tokens,
-                                cost=total_cost,
-                                time_taken=time_taken,
-                            )
-                        
-                        # Final response with whitespace restoration
-                        final_text = content_prefix + accumulated_text + content_suffix
-                        final_time_taken = (datetime.now() - start_time).total_seconds()
-                        
-                        yield TranslationResponse(
-                            text=final_text,
-                            tokens_used=total_tokens,
-                            cost=total_cost,
-                            time_taken=final_time_taken,
-                        )
-                        
-                    except Exception as e:
-                        self._logger.error(f"Streaming failed: {str(e)}")
-                        raise TranslationError(f"Streaming failed: {str(e)}") from e
-
-                return response_generator()
-            else:
-                # Handle non-streaming with whitespace restoration
-                try:
-                    logger.debug(f"Making completion request", request=clean_request)
-
-                    response = await self._make_completion_request(
-                        clean_request, stream=False
-                    )
-                    
-                    logger.debug(f"Completion request made", response=response)
-
-                    if not hasattr(response, "choices") or not response.choices:
-                        raise TranslationError("No response from model")
-
-                    if not hasattr(response.choices[0], "finish_reason") or not response.choices[0].finish_reason == "stop":
-                        raise TranslationError(f"Invalid finish reason from model: {response.choices[0].finish_reason}, expected 'stop'")
-
-                    if not hasattr(response.choices[0], "message") or not hasattr(
-                        response.choices[0].message, "content"
-                    ):
-                        raise TranslationError("Invalid response format")
-
-                    text = response.choices[0].message.content
-
-                    if not text or not text.strip():
-                        raise TranslationError("No content returned from model")
-
-                    # Get actual token usage from LiteLLM response
-                    tokens = getattr(response.usage, "total_tokens", 0)
-                    
-                    # Get actual cost from LiteLLM response
-                    cost = 0.0
-                    if hasattr(response, "_hidden_params") and "response_cost" in response._hidden_params:
-                        cost = response._hidden_params["response_cost"]
-                    else:
-                        # Fallback: calculate cost using LiteLLM's completion_cost function
-                        try:
-                            cost = completion_cost(completion_response=response)
-                        except Exception:
-                            # If all else fails, cost remains 0.0
-                            pass
-                    
-                    # Calculate time taken
-                    time_taken = (datetime.now() - start_time).total_seconds()
-
-                    # Restore whitespace
-                    final_text = content_prefix + text + content_suffix
-
-                    logger.debug("Final text: ", final_text=final_text)
-
-                    return TranslationResponse(
-                        text=final_text,
-                        tokens_used=tokens,
-                        cost=cost,
-                        time_taken=time_taken,
-                    )
-                except TranslationError:
-                    raise
-                except Exception as e:
-                    self._logger.error(f"Translation failed: {str(e)}")
-                    raise TranslationError(f"Translation failed: {str(e)}") from e
+                return TranslationResponse(
+                    text=final_text,
+                    tokens_used=tokens,
+                    cost=cost,
+                    time_taken=time_taken,
+                )
+            except TranslationError:
+                raise
+            except Exception as e:
+                self._logger.error(f"Translation failed: {str(e)}")
+                raise TranslationError(f"Translation failed: {str(e)}") from e
 
         except TranslationError:
             # Re-raise TranslationError without wrapping

@@ -160,79 +160,10 @@ class TestWhitespacePreservationEndToEnd:
         assert response.cost == 0.001
         assert response.time_taken > 0
 
-    @pytest.mark.asyncio
-    async def test_whitespace_preservation_streaming(self, mock_completion_with_whitespace, monkeypatch):
-        """Test whitespace preservation in streaming mode."""
-        # Mock streaming completion
-        async def mock_stream():
-            yield type(
-                "CompletionChunk",
-                (),
-                {
-                    "choices": [
-                        type(
-                            "Choice",
-                            (),
-                            {
-                                "delta": type(
-                                    "Delta",
-                                    (),
-                                    {"content": "Translated text"},  # No whitespace
-                                )
-                            },
-                        )
-                    ],
-                    "usage": type(
-                        "Usage",
-                        (),
-                        {
-                            "total_tokens": 10,
-                        },
-                    ),
-                    "_hidden_params": {
-                        "response_cost": 0.001
-                    },
-                },
-            )
-
-        def mock_streaming_completion(*args, **kwargs):
-            if kwargs.get('stream'):
-                return mock_stream()
-            else:
-                # Fallback to regular mock
-                return mock_completion_with_whitespace()
-
-        import litellm
-        monkeypatch.setattr(litellm, "completion", mock_streaming_completion)
-        monkeypatch.setattr("tinbox.core.translation.litellm.completion", mock_streaming_completion)
-
-        translator = LiteLLMTranslator()
-        
-        request = TranslationRequest(
-            source_lang="en",
-            target_lang="es",
-            content="  Hello, world!  ",
-            context=None,
-            content_type="text/plain",
-            model=ModelType.ANTHROPIC,
-            model_params={"model_name": "claude-3-sonnet"},
-        )
-
-        responses = []
-        async for chunk in await translator.translate(request, stream=True):
-            responses.append(chunk)
-        
-        # The final response should have whitespace preserved
-        assert len(responses) >= 1
-        final_response = responses[-1]
-        assert final_response.text == "  Translated text  "
-        assert final_response.tokens_used == 10
-        assert final_response.cost == 0.001
-        assert final_response.time_taken > 0
 
     @pytest.mark.asyncio
-    async def test_whitespace_preservation_non_streaming(self, mock_completion_with_whitespace):
-        """Test whitespace preservation in non-streaming mode."""
+    async def test_whitespace_preservation(self, mock_completion_with_whitespace):
+        """Test whitespace preservation."""
         translator = LiteLLMTranslator()
         
         request = TranslationRequest(

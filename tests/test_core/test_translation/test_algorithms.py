@@ -29,7 +29,7 @@ def mock_translator():
     """Create a mock translator."""
     translator = AsyncMock(spec=ModelInterface)
 
-    async def mock_translate(request, stream=False):
+    async def mock_translate(request):
         if hasattr(request, "content") and request.content == "Page 2":
             if getattr(mock_translate, "should_fail", False):
                 raise TranslationError("Failed to translate page 2")
@@ -166,7 +166,7 @@ async def test_translate_sliding_window_with_checkpointing(
     # Track translation calls
     translation_calls = []
 
-    async def mock_translate(request, stream=False):
+    async def mock_translate(request):
         print(f"Mock translate called with: {request.content}")  # Debug print
         translation_calls.append(request.content)
         return TranslationResponse(
@@ -226,7 +226,7 @@ async def test_translation_without_checkpointing(
     )
 
     # Set up mock translator with proper response
-    async def mock_translate(request, stream=False):
+    async def mock_translate(request):
         return TranslationResponse(
             text="Translated text",
             tokens_used=10,
@@ -268,7 +268,7 @@ async def test_translation_with_failed_pages(
     # Create a new mock translator that fails on page 2
     translator = AsyncMock(spec=ModelInterface)
 
-    async def mock_translate(request, stream=False):
+    async def mock_translate(request):
         if hasattr(request, "content") and request.content == "Page 2":
             raise TranslationError("Failed to translate page 2")
         return TranslationResponse(

@@ -25,7 +25,7 @@ def mock_translator():
     """Create a mock translator for context-aware testing."""
     translator = AsyncMock(spec=ModelInterface)
 
-    async def mock_translate(request, stream=False):
+    async def mock_translate(request):
         # Handle the new structure where content is pure and context is separate
         content = request.content
         return TranslationResponse(
