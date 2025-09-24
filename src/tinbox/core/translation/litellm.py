@@ -209,6 +209,7 @@ class LiteLLMTranslator(ModelInterface):
                 max_tokens=self.max_tokens,
                 stream=False,
                 response_format=TranslationWithGlossaryResponse if request.glossary else TranslationWithoutGlossaryResponse,
+                reasoning_effort="minimal",
                 drop_params=True,
                 **{k: v for k, v in request.model_params.items() if k != "model_name"},
             )
