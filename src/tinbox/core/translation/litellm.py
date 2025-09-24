@@ -122,7 +122,7 @@ class LiteLLMTranslator(ModelInterface):
                     f"Translate only the content, do not add any explanations or notes. "
                     f"Do not add any commentary or notes to the translation. It is extremely "
                     f"important that the only output you give is the translation of the content. "
-                    f"Your translation should be in '{request.target_lang}' language."
+                    f"IMPORTANT: Your translation should ALWAYS(!) be in '{request.target_lang}' language."
                 ),
             }
         ]
@@ -153,8 +153,8 @@ class LiteLLMTranslator(ModelInterface):
                     "role": "user",
                     "content": (
                         f"[TRANSLATE_THIS]{request.content}[/TRANSLATE_THIS]\n\n"
-                        f"Only return the translation of the text between [TRANSLATE_THIS] tags (including ALL markup/formatting and line-breaks). "
-                        f"Do not include the tags or any other content. Translation without commentary:"
+                        f"Only return the translation in '{request.target_lang}' language of the text between the [TRANSLATE_THIS]-tags (including ALL markup/formatting and line-breaks). "
+                        f"Do not include any other content. \n\nTranslation in '{request.target_lang}' language without commentary:"
                     ),
                 }
             )
