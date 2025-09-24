@@ -134,7 +134,7 @@ class LiteLLMTranslator(ModelInterface):
             })
 
         # Add glossary context if available
-        if request.glossary and request.glossary.entries:
+        if request.glossary:
             glossary_context = (
                 "Use this glossary for consistent translations:\n"
                 f"{request.glossary.to_context_string()}\n\n"

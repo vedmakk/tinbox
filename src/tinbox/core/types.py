@@ -160,7 +160,7 @@ class Glossary(BaseModel):
     def to_context_string(self) -> str:
         """Convert glossary to context string for LLM consumption."""
         if not self.entries:
-            return ""
+            return "[The glossary is still empty… add terms as they are encountered.]"
         lines: List[str] = ["[GLOSSARY]"]
         for term, translation in self.entries.items():
             lines.append(f"{term} -> {translation}")
