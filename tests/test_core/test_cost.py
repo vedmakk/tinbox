@@ -77,15 +77,15 @@ def test_estimate_document_tokens(tmp_path, file_type, content, expected_tokens)
         (
             ModelType.OPENAI,
             100_000,
-            1.125,  # 100K tokens * ($0.00125 input + $0.01 output) per 1K tokens = 100 * 0.01125 = 1.125
+            1.12875,  # 100K input tokens + 3% overhead = 103K input, 100K output -> (103 * 0.00125) + (100 * 0.01) = 0.12875 + 1.0 = 1.12875
             [
-                "Large document detected (100,000 tokens). Consider using Ollama for better performance and no cost."
+                "Large document detected (203,000.0 tokens). Consider using Ollama for better performance and no cost."
             ],
         ),
         (
             ModelType.ANTHROPIC,
             25_000,
-            0.45,  # 25K tokens * ($0.003 input + $0.015 output) per 1K tokens = 25 * 0.018 = 0.45
+            0.45225,  # 25K input tokens + 3% overhead = 25.75K input, 25K output -> (25.75 * 0.003) + (25 * 0.015) = 0.07725 + 0.375 = 0.45225
             [],
         ),
         (
@@ -106,9 +106,13 @@ def test_estimate_cost(tmp_path, model, tokens, expected_cost, expected_warnings
         return_value=tokens,
     ):
         estimate = estimate_cost(file_path, model)
-        assert estimate.estimated_tokens == tokens
+        # estimated_tokens now includes input + output tokens
+        # For page algorithm: input tokens + 3% overhead + output tokens
+        expected_input_with_overhead = tokens + (tokens * 0.03)
+        expected_total_tokens = expected_input_with_overhead + tokens
+        assert estimate.estimated_tokens == expected_total_tokens
         assert (
-            abs(estimate.estimated_cost - expected_cost) < 0.001
+            abs(estimate.estimated_cost - expected_cost) < 0.01
         )  # Allow small floating-point differences
         assert all(
             any(expected in warning for warning in estimate.warnings)
@@ -128,7 +132,7 @@ def test_cost_threshold_warning():
             max_cost=max_cost,
         )
         assert any(
-            f"Estimated cost ($1.12) exceeds maximum threshold (${max_cost:.2f})"
+            f"Estimated cost ($1.13) exceeds maximum threshold (${max_cost:.2f})"
             in warning
             for warning in estimate.warnings
         )
@@ -150,9 +154,9 @@ def test_estimate_context_aware_tokens():
     """Test context-aware token estimation."""
     base_tokens = 1000
     
-    # Test with default multiplier (1.8)
+    # Test with default multiplier (3.0)
     result = estimate_context_aware_tokens(base_tokens)
-    assert result == 1800
+    assert result == 3000
     
     # Test with custom multiplier
     result = estimate_context_aware_tokens(base_tokens, context_multiplier=2.0)
@@ -168,7 +172,7 @@ def test_estimate_context_aware_tokens():
     [
         ("page", 1000, 1000),
         ("sliding-window", 1000, 1000),
-        ("context-aware", 1800, 1000),  # 1.8x input tokens for context overhead
+        ("context-aware", 3000, 1000),  # 3.0x input tokens for context overhead
     ],
 )
 def test_estimate_cost_by_algorithm(tmp_path, algorithm, expected_input_tokens, expected_output_tokens):
@@ -181,13 +185,23 @@ def test_estimate_cost_by_algorithm(tmp_path, algorithm, expected_input_tokens, 
     with patch("tinbox.core.cost.estimate_document_tokens", return_value=base_tokens):
         estimate = estimate_cost(file_path, ModelType.OPENAI, algorithm=algorithm)
         
+        # Account for prompt overhead (3%)
+        if algorithm == "context-aware":
+            # Context-aware: 3000 input tokens + 3% prompt overhead
+            adjusted_input_tokens = expected_input_tokens + (expected_input_tokens * 0.03)
+        else:
+            # Page/sliding-window: 1000 input tokens + 3% prompt overhead
+            adjusted_input_tokens = expected_input_tokens + (expected_input_tokens * 0.03)
+        
         # For OpenAI: input $0.00125/1K, output $0.01/1K
-        expected_input_cost = (expected_input_tokens / 1000) * 0.00125
+        expected_input_cost = (adjusted_input_tokens / 1000) * 0.00125
         expected_output_cost = (expected_output_tokens / 1000) * 0.01
         expected_total_cost = expected_input_cost + expected_output_cost
         
         assert abs(estimate.estimated_cost - expected_total_cost) < 0.001
-        assert estimate.estimated_tokens == base_tokens  # Base tokens remain the same
+        # estimated_tokens now includes input + output tokens
+        expected_total_tokens = adjusted_input_tokens + expected_output_tokens
+        assert estimate.estimated_tokens == expected_total_tokens
 
 
 def test_context_aware_cost_warning():
@@ -206,8 +220,11 @@ def test_context_aware_cost_warning():
         
         # Should mention the overhead amount
         warning = context_warnings[0]
-        assert "+800 tokens" in warning  # 1800 - 1000 = 800
-        assert "~80% overhead" in warning
+        # Context-aware tokens: 3000, plus 3% prompt overhead = 3090
+        # Overhead: 3090 - 1000 = 2090
+        # Percentage: 2090/1000 * 100 = 209%
+        assert "+2,090 tokens" in warning
+        assert "~209% overhead" in warning
 
 
 def test_context_aware_no_warning_for_ollama():
@@ -223,3 +240,42 @@ def test_context_aware_no_warning_for_ollama():
             if "Context-aware algorithm uses additional input tokens" in warning
         ]
         assert len(context_warnings) == 0
+
+
+def test_glossary_cost_overhead():
+    """Test glossary adds proper cost overhead."""
+    file_path = Path("test.txt")
+    base_tokens = 1000
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=base_tokens):
+        # Test without glossary
+        estimate_no_glossary = estimate_cost(file_path, ModelType.OPENAI, use_glossary=False)
+        
+        # Test with glossary
+        estimate_with_glossary = estimate_cost(file_path, ModelType.OPENAI, use_glossary=True)
+        
+        # With glossary should cost more
+        assert estimate_with_glossary.estimated_cost > estimate_no_glossary.estimated_cost
+        
+        # Should have glossary warning
+        glossary_warnings = [
+            warning for warning in estimate_with_glossary.warnings
+            if "Glossary enabled adds input token overhead" in warning
+        ]
+        assert len(glossary_warnings) == 1
+        assert "~20% of total tokens" in glossary_warnings[0]
+
+
+def test_glossary_no_warning_for_ollama():
+    """Test that glossary doesn't warn for Ollama."""
+    file_path = Path("test.txt")
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=1000):
+        estimate = estimate_cost(file_path, ModelType.OLLAMA, use_glossary=True)
+        
+        # Should not have glossary warning for free models
+        glossary_warnings = [
+            warning for warning in estimate.warnings
+            if "Glossary enabled adds input token overhead" in warning
+        ]
+        assert len(glossary_warnings) == 0

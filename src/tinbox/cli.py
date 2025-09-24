@@ -85,7 +85,7 @@ def display_cost_estimate(estimate, model: ModelType) -> None:
     table.add_row("Estimated Tokens", f"{estimate.estimated_tokens:,}")
     if model != ModelType.OLLAMA:
         table.add_row("Estimated Cost", f"${estimate.estimated_cost:.2f}")
-    table.add_row("Estimated Time", f"{estimate.estimated_time / 60:.1f} minutes")
+    table.add_row("Estimated Time", f"{estimate.estimated_time / 60:.1f} minutes" if estimate.estimated_time > 60 else "<1 minute")
     table.add_row("Cost Level", estimate.cost_level.value.title())
 
     console.print(table)
@@ -240,6 +240,7 @@ def translate(
             model_type,
             algorithm=algorithm,
             max_cost=max_cost,
+            use_glossary=use_glossary,
         )
 
         # Display cost estimate

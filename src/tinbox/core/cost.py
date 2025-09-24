@@ -113,7 +113,7 @@ class CostEstimate:
 
 def estimate_context_aware_tokens(
     estimated_tokens: int,
-    context_multiplier: float = 1.8
+    context_multiplier: float = 3
 ) -> int:
     """Estimate input tokens for context-aware translation.
 
@@ -138,7 +138,7 @@ def estimate_cost(
     *,
     algorithm: str = "page",
     max_cost: Optional[float] = None,
-    glossary_terms: int = 0,
+    use_glossary: bool = False,
 ) -> CostEstimate:
     """Estimate the cost of translating a document.
 
@@ -163,27 +163,34 @@ def estimate_cost(
         input_tokens = estimated_tokens
         output_tokens = estimated_tokens
     
-    # Add glossary overhead: assume ~4 tokens per term on average (term, arrow, translation)
-    if glossary_terms > 0:
-        glossary_overhead_tokens = glossary_terms * 4
-        input_tokens += glossary_overhead_tokens
+    # Add general prompt overhead (system prompt, etc.):
+    prompt_factor = 0.03
+    input_tokens += input_tokens * prompt_factor
     
+    # Add glossary overhead: assume a 20% overhead as per testing
+    glossary_factor = 0.20
+    if use_glossary:
+        glossary_overhead_tokens = (input_tokens + output_tokens) * glossary_factor
+        input_tokens += glossary_overhead_tokens
+
     input_cost = (input_tokens / 1000) * input_cost_per_1k
     output_cost = (output_tokens / 1000) * output_cost_per_1k
     estimated_cost = input_cost + output_cost
 
+    estimated_total_tokens = input_tokens + output_tokens
+
     # Estimate time (very rough estimate)
-    # Assume 5 tokens/second for cloud models, 20 tokens/second for local
-    tokens_per_second = 20 if model == ModelType.OLLAMA else 5
-    estimated_time = estimated_tokens / tokens_per_second
+    # Assume 65 tokens/second for cloud models, 20 tokens/second for local
+    tokens_per_second = 20 if model == ModelType.OLLAMA else 65
+    estimated_time = output_tokens / tokens_per_second
 
     warnings = []
 
     # Generate warnings
     if model != ModelType.OLLAMA:
-        if estimated_tokens > 50000:  # More than 50K tokens
+        if estimated_total_tokens > 50000:  # More than 50K tokens
             warnings.append(
-                f"Large document detected ({estimated_tokens:,} tokens). "
+                f"Large document detected ({estimated_total_tokens:,} tokens). "
                 "Consider using Ollama for better performance and no cost."
             )
 
@@ -191,13 +198,13 @@ def estimate_cost(
             context_overhead = input_tokens - estimated_tokens
             warnings.append(
                 f"Context-aware algorithm uses additional input tokens for context "
-                f"(+{context_overhead:,} tokens, ~80% overhead). "
+                f"(+{context_overhead:,.0f} tokens, ~{context_overhead / estimated_tokens * 100:.0f}% overhead). "
                 f"This improves translation quality but increases cost."
             )
 
-        if glossary_terms > 0:
+        if use_glossary:
             warnings.append(
-                f"Glossary enabled with {glossary_terms} terms adds input token overhead (~{glossary_terms * 4:,} tokens)."
+                f"Glossary enabled adds input token overhead (~{glossary_factor * 100:.0f}% of total tokens)."
             )
 
         if max_cost and estimated_cost > max_cost:
@@ -207,7 +214,7 @@ def estimate_cost(
             )
 
     return CostEstimate(
-        estimated_tokens=estimated_tokens,
+        estimated_tokens=estimated_total_tokens,
         estimated_cost=estimated_cost,
         estimated_time=estimated_time,
         warnings=warnings,
