@@ -269,6 +269,12 @@ echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc
 | `--glossary-file` | Path to existing glossary file (JSON format)     | `--glossary-file terms.json` |
 | `--save-glossary` | Path to save updated glossary after translation  | `--save-glossary terms.json` |
 
+#### Model Quality Options
+
+| Option               | Description                                               | Example                   |
+| -------------------- | --------------------------------------------------------- | ------------------------- |
+| `--reasoning-effort` | Model reasoning effort level (minimal, low, medium, high) | `--reasoning-effort high` |
+
 #### Output Format Options
 
 | Option            | Description                          | Example Output          |
@@ -416,6 +422,19 @@ tinbox translate --to es --format markdown document.pdf
 
    # Use glossary without saving updates
    tinbox translate --to de --glossary-file company_terms.json document.docx
+   ```
+
+9. **Model Quality Settings**
+
+   ```bash
+   # Use higher reasoning effort for better quality (costs more, takes much longer)
+   tinbox translate --to es --reasoning-effort high --max-cost 10.00 technical_document.pdf
+
+   # Use low reasoning effort for balanced quality/cost
+   tinbox translate --to fr --reasoning-effort low document.docx
+
+   # Default minimal reasoning effort (fastest, cheapest)
+   tinbox translate --to de --reasoning-effort minimal document.txt
    ```
 
 ### Glossary File Format

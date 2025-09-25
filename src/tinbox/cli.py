@@ -226,9 +226,22 @@ def translate(
         "--save-glossary",
         help="Path to save the updated glossary after translation.",
     ),
+    reasoning_effort: str = typer.Option(
+        "minimal",
+        "--reasoning-effort",
+        help="Model reasoning effort level (minimal, low, medium, high). Higher levels improve quality but increase cost and time significantly.",
+    ),
 ) -> None:
     """Translate a document using LLMs."""
     try:
+        # Validate reasoning effort parameter
+        valid_reasoning_efforts = ["minimal", "low", "medium", "high"]
+        if reasoning_effort not in valid_reasoning_efforts:
+            raise ValueError(
+                f"Invalid reasoning effort '{reasoning_effort}'. "
+                f"Valid options: {', '.join(valid_reasoning_efforts)}"
+            )
+
         # Parse model specification
         model_type, model_name = parse_model_spec(model)
 
@@ -242,6 +255,7 @@ def translate(
             algorithm=algorithm,
             max_cost=max_cost,
             use_glossary=use_glossary,
+            reasoning_effort=reasoning_effort,
         )
 
         # Display cost estimate
@@ -279,6 +293,7 @@ def translate(
             checkpoint_dir=checkpoint_dir,
             checkpoint_frequency=checkpoint_frequency,
             use_glossary=use_glossary,
+            reasoning_effort=reasoning_effort,
         )
 
         # Load document

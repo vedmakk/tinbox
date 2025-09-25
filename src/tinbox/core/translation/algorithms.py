@@ -230,6 +230,7 @@ async def translate_page_by_page(
                     if config.model_name
                     else {},
                     glossary=glossary_manager.get_current_glossary() if config.use_glossary and glossary_manager else None,
+                    reasoning_effort=config.reasoning_effort,
                 )
 
                 # Translate page
@@ -398,6 +399,7 @@ async def translate_sliding_window(
                 if config.model_name
                 else {},
                 glossary=glossary_manager.get_current_glossary() if config.use_glossary and glossary_manager else None,
+                reasoning_effort=config.reasoning_effort,
             )
 
             # Translate window
@@ -886,6 +888,7 @@ async def translate_context_aware(
                 if config.model_name
                 else {},
                 glossary=glossary_manager.get_current_glossary() if config.use_glossary and glossary_manager else None,
+                reasoning_effort=config.reasoning_effort,
             )
 
             # Translate chunk

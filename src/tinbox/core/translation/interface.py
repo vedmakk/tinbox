@@ -1,6 +1,6 @@
 """Translation interface definitions."""
 
-from typing import Optional, Protocol, Union, List
+from typing import Optional, Protocol, Union, List, Literal
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -28,6 +28,10 @@ class TranslationRequest(BaseModel):
     glossary: Optional[Glossary] = Field(
         default=None,
         description="Optional glossary for consistent translations",
+    )
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] = Field(
+        default="minimal",
+        description="Model reasoning effort level. Higher levels improve quality but increase cost and time significantly.",
     )
 
     model_config = ConfigDict(frozen=True, protected_namespaces=())

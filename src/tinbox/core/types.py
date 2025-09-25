@@ -108,6 +108,12 @@ class TranslationConfig(BaseModel):
         description="Enable glossary for consistent term translations.",
     )
 
+    # Model reasoning settings
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] = Field(
+        default="minimal",
+        description="Model reasoning effort level. Higher levels improve quality but increase cost and time significantly.",
+    )
+
     model_config = ConfigDict(
         frozen=True,  # Make config immutable
         arbitrary_types_allowed=True,  # Allow Callable type for progress_callback

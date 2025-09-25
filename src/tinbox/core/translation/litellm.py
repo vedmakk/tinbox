@@ -209,7 +209,7 @@ class LiteLLMTranslator(ModelInterface):
                 max_tokens=self.max_tokens,
                 stream=False,
                 response_format=TranslationWithGlossaryResponse if request.glossary else TranslationWithoutGlossaryResponse,
-                reasoning_effort="minimal",
+                reasoning_effort=request.reasoning_effort,
                 drop_params=True,
                 **{k: v for k, v in request.model_params.items() if k != "model_name"},
             )
@@ -270,6 +270,7 @@ class LiteLLMTranslator(ModelInterface):
                 model=request.model,
                 model_params=request.model_params,
                 glossary=request.glossary,
+                reasoning_effort=request.reasoning_effort,
             )
 
             # Validate language codes (2 or 3 letter codes, or 'auto' for source)

@@ -279,3 +279,65 @@ def test_glossary_no_warning_for_ollama():
             if "Glossary enabled adds input token overhead" in warning
         ]
         assert len(glossary_warnings) == 0
+
+
+def test_reasoning_effort_minimal_no_warning():
+    """Test that minimal reasoning effort doesn't produce warnings."""
+    test_file = Path("test.txt")
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=1000):
+        estimate = estimate_cost(
+            test_file, 
+            ModelType.OPENAI, 
+            reasoning_effort="minimal"
+        )
+    
+    # Should not have reasoning effort warning for minimal
+    reasoning_warnings = [
+        warning for warning in estimate.warnings
+        if "Reasoning effort is" in warning
+    ]
+    assert len(reasoning_warnings) == 0
+
+
+@pytest.mark.parametrize("reasoning_effort", ["low", "medium", "high"])
+def test_reasoning_effort_warning(reasoning_effort):
+    """Test that non-minimal reasoning effort produces warnings."""
+    test_file = Path("test.txt")
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=1000):
+        estimate = estimate_cost(
+            test_file, 
+            ModelType.OPENAI, 
+            reasoning_effort=reasoning_effort
+        )
+    
+    # Should have reasoning effort warning for non-minimal
+    reasoning_warnings = [
+        warning for warning in estimate.warnings
+        if "Reasoning effort is" in warning
+    ]
+    assert len(reasoning_warnings) == 1
+    assert f"Reasoning effort is '{reasoning_effort}'" in reasoning_warnings[0]
+    assert "cost and time estimations are unreliable" in reasoning_warnings[0]
+    assert "--max-cost" in reasoning_warnings[0]
+
+
+def test_reasoning_effort_with_ollama():
+    """Test that reasoning effort warning appears even with Ollama (free models)."""
+    test_file = Path("test.txt")
+    
+    with patch("tinbox.core.cost.estimate_document_tokens", return_value=1000):
+        estimate = estimate_cost(
+            test_file, 
+            ModelType.OLLAMA, 
+            reasoning_effort="high"
+        )
+    
+    # Should have reasoning effort warning even for free models
+    reasoning_warnings = [
+        warning for warning in estimate.warnings
+        if "Reasoning effort is" in warning
+    ]
+    assert len(reasoning_warnings) == 1
+    assert "Reasoning effort is 'high'" in reasoning_warnings[0]

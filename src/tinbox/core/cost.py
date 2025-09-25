@@ -6,6 +6,9 @@ from typing import Dict, Optional
 
 from tinbox.core.types import FileType, ModelType
 
+from tinbox.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 class CostLevel(str, Enum):
     """Cost level classification."""
@@ -139,6 +142,7 @@ def estimate_cost(
     algorithm: str = "page",
     max_cost: Optional[float] = None,
     use_glossary: bool = False,
+    reasoning_effort: str = "minimal",
 ) -> CostEstimate:
     """Estimate the cost of translating a document.
 
@@ -147,6 +151,8 @@ def estimate_cost(
         model: Model to use for translation
         algorithm: Translation algorithm to use
         max_cost: Optional maximum cost threshold
+        use_glossary: Whether glossary is enabled
+        reasoning_effort: Model reasoning effort level
 
     Returns:
         CostEstimate object with token count, cost, and warnings
@@ -184,6 +190,21 @@ def estimate_cost(
     tokens_per_second = 20 if model == ModelType.OLLAMA else 30
     estimated_time = output_tokens / tokens_per_second
 
+    # Infos
+    if algorithm == "context-aware":
+        context_overhead = input_tokens - estimated_tokens
+        logger.info(
+            f"Context-aware algorithm uses additional input tokens for context "
+            f"(+{context_overhead:,.0f} tokens, ~{context_overhead / estimated_tokens * 100:.0f}% overhead). "
+            f"This improves translation quality but increases cost."
+        )
+
+    if use_glossary:
+        logger.info(
+            f"Glossary enabled adds input token overhead (~{glossary_factor * 100:.0f}% of total tokens)."
+        )
+
+    # Warnings
     warnings = []
 
     # Generate warnings
@@ -194,24 +215,18 @@ def estimate_cost(
                 "Consider using Ollama for no cost."
             )
 
-        if algorithm == "context-aware":
-            context_overhead = input_tokens - estimated_tokens
-            warnings.append(
-                f"Context-aware algorithm uses additional input tokens for context "
-                f"(+{context_overhead:,.0f} tokens, ~{context_overhead / estimated_tokens * 100:.0f}% overhead). "
-                f"This improves translation quality but increases cost."
-            )
-
-        if use_glossary:
-            warnings.append(
-                f"Glossary enabled adds input token overhead (~{glossary_factor * 100:.0f}% of total tokens)."
-            )
-
         if max_cost and estimated_cost > max_cost:
             warnings.append(
                 f"Estimated cost (${estimated_cost:.2f}) exceeds maximum "
                 f"threshold (${max_cost:.2f})"
             )
+
+    # Reasoning effort warning applies to all models (even free ones like Ollama)
+    if reasoning_effort != "minimal":
+        warnings.append(
+            f"Reasoning effort is '{reasoning_effort}', which means cost and time estimations are unreliable and will be much higher. "
+            f"Make sure to set a --max-cost and keep an eye on the live cost and time predictions in the progress bar."
+        )
 
     return CostEstimate(
         estimated_tokens=estimated_total_tokens,
