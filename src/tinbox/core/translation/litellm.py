@@ -141,7 +141,7 @@ class LiteLLMTranslator(ModelInterface):
                 f"{request.glossary.to_context_string()}\n\n"
                 "When you encounter these terms, use the provided translations. "
                 "If you encounter new important terms that benefit from consistent translation "
-                "(technical terms, proper nouns, domain vocabulary), include them in the glossary_extension field in your response. "
+                "(technical terms, proper nouns, domain vocabulary, names, etc.), include them in the glossary_extension field in your response. "
                 "Only include terms that are important for consistent translation."
             )
             messages.append({"role": "user", "content": glossary_context})
