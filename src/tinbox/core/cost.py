@@ -6,9 +6,6 @@ from typing import Dict, Optional
 
 from tinbox.core.types import FileType, ModelType
 
-from tinbox.utils.logging import get_logger
-
-logger = get_logger(__name__)
 
 class CostLevel(str, Enum):
     """Cost level classification."""
@@ -190,21 +187,6 @@ def estimate_cost(
     tokens_per_second = 20 if model == ModelType.OLLAMA else 30
     estimated_time = output_tokens / tokens_per_second
 
-    # Infos
-    if algorithm == "context-aware":
-        context_overhead = input_tokens - estimated_tokens
-        logger.info(
-            f"Context-aware algorithm uses additional input tokens for context "
-            f"(+{context_overhead:,.0f} tokens, ~{context_overhead / estimated_tokens * 100:.0f}% overhead). "
-            f"This improves translation quality but increases cost."
-        )
-
-    if use_glossary:
-        logger.info(
-            f"Glossary enabled adds input token overhead (~{glossary_factor * 100:.0f}% of total tokens)."
-        )
-
-    # Warnings
     warnings = []
 
     # Generate warnings
@@ -213,6 +195,19 @@ def estimate_cost(
             warnings.append(
                 f"Large document detected ({estimated_total_tokens:,} tokens). "
                 "Consider using Ollama for no cost."
+            )
+
+        if algorithm == "context-aware":
+            context_overhead = input_tokens - estimated_tokens
+            warnings.append(
+                f"Context-aware algorithm uses additional input tokens for context "
+                f"(+{context_overhead:,.0f} tokens, ~{context_overhead / estimated_tokens * 100:.0f}% overhead). "
+                f"This improves translation quality but increases cost."
+            )
+
+        if use_glossary:
+            warnings.append(
+                f"Glossary enabled adds input token overhead (~{glossary_factor * 100:.0f}% of total tokens)."
             )
 
         if max_cost and estimated_cost > max_cost:
