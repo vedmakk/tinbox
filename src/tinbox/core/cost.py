@@ -191,7 +191,7 @@ def estimate_cost(
         if estimated_total_tokens > 50000:  # More than 50K tokens
             warnings.append(
                 f"Large document detected ({estimated_total_tokens:,} tokens). "
-                "Consider using Ollama for better performance and no cost."
+                "Consider using Ollama for no cost."
             )
 
         if algorithm == "context-aware":

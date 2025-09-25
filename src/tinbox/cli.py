@@ -30,6 +30,7 @@ from tinbox.core.output import (
     create_handler,
 )
 from tinbox.utils.logging import configure_logging, get_logger
+from tinbox.core.progress import CurrentCostColumn, EstimatedCostColumn
 
 app = typer.Typer(
     name="tinbox",
@@ -305,6 +306,8 @@ def translate(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             MofNCompleteColumn(),
+            CurrentCostColumn(),
+            EstimatedCostColumn(),
             TimeElapsedColumn(),
             TimeRemainingColumn(),
             console=console,

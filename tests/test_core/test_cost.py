@@ -79,7 +79,7 @@ def test_estimate_document_tokens(tmp_path, file_type, content, expected_tokens)
             100_000,
             1.12875,  # 100K input tokens + 3% overhead = 103K input, 100K output -> (103 * 0.00125) + (100 * 0.01) = 0.12875 + 1.0 = 1.12875
             [
-                "Large document detected (203,000.0 tokens). Consider using Ollama for better performance and no cost."
+                "Large document detected (203,000.0 tokens). Consider using Ollama for no cost."
             ],
         ),
         (
@@ -145,7 +145,7 @@ def test_ollama_suggestion():
     with patch("tinbox.core.cost.estimate_document_tokens", return_value=100_000):
         estimate = estimate_cost(file_path, ModelType.OPENAI)
         assert any(
-            "Consider using Ollama for better performance and no cost" in warning
+            "Consider using Ollama for no cost" in warning
             for warning in estimate.warnings
         )
 

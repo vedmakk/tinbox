@@ -8,7 +8,6 @@ from typing import List, Optional
 from rich.progress import Progress, TaskID
 
 from tinbox.core.processor import DocumentContent
-from tinbox.core.progress import ProgressTracker
 from tinbox.core.translation.checkpoint import (
     CheckpointManager,
     TranslationState,
@@ -190,8 +189,9 @@ async def translate_page_by_page(
         resume_result = await resume_from_checkpoint(checkpoint_manager, config)
         total_tokens = resume_result.total_tokens
         total_cost = resume_result.total_cost
+        
         if progress and task_id is not None and resume_result.resumed:
-            progress.update(task_id, completed=len(resume_result.translated_items))
+            progress.update(task_id, completed=len(resume_result.translated_items), total_cost=total_cost)
         
         translated_pages = resume_result.translated_items
 
@@ -245,7 +245,7 @@ async def translate_page_by_page(
 
                 # Update progress
                 if progress and task_id is not None:
-                    progress.update(task_id, advance=1)
+                    progress.update(task_id, advance=1, total_cost=total_cost)
 
                 # Save checkpoint if needed
                 if (
@@ -376,6 +376,7 @@ async def translate_sliding_window(
                 "Translating windows...",
                 total=len(windows),
                 completed=len(translated_windows),
+                total_cost=total_cost,
             )
 
         # Restore glossary state from checkpoint if enabled
@@ -412,7 +413,7 @@ async def translate_sliding_window(
 
             # Update progress
             if progress and task_id is not None:
-                progress.update(task_id, advance=1)
+                progress.update(task_id, advance=1, total_cost=total_cost)
 
             # Save checkpoint if needed
             if (
@@ -850,6 +851,7 @@ async def translate_context_aware(
                 "Translating chunks...",
                 total=len(chunks),
                 completed=len(translated_chunks),
+                total_cost=total_cost,
             )
 
         # Restore glossary state from checkpoint if enabled
@@ -899,7 +901,7 @@ async def translate_context_aware(
 
             # Update progress
             if progress and task_id is not None:
-                progress.update(task_id, advance=1)
+                progress.update(task_id, advance=1, total_cost=total_cost)
 
             # Save checkpoint if needed
             if (
