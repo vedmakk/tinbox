@@ -160,7 +160,7 @@ def translate(
         help="Target language code. Defaults to 'en' (English).",
     ),
     model: str = typer.Option(
-        "anthropic:claude-3-sonnet",
+        ...,
         "--model",
         "-m",
         help="Model to use (e.g., 'openai:gpt-4o', 'anthropic:claude-3-sonnet', 'ollama:mistral-small').",
@@ -219,7 +219,7 @@ def translate(
     glossary_file: Optional[Path] = typer.Option(
         None,
         "--glossary-file",
-        help="Path to existing glossary file (JSON format).",
+        help="Path to existing glossary file (JSON format) to load initial terms from.",
     ),
     save_glossary: Optional[Path] = typer.Option(
         None,

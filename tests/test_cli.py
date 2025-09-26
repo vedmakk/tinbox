@@ -145,6 +145,8 @@ def test_translate_dry_run(cli_runner, mock_cost_estimate):
                     str(test_file),
                     "--to",
                     "es",
+                    "--model",
+                    "openai:gpt-4o",
                     "--dry-run",
                 ],
             )
@@ -182,6 +184,8 @@ def test_translate_with_warnings(cli_runner):
                     str(test_file),
                     "--to",
                     "es",
+                    "--model",
+                    "openai:gpt-4o",
                 ],
             )
             assert result.exit_code == 1
@@ -221,7 +225,7 @@ def test_translate_with_output_file(
             ),
             patch("tinbox.cli.create_translator", return_value=mock_model_interface),
             patch("tinbox.cli.console"),
-        ):
+            ):
             result = cli_runner.invoke(
                 app,
                 [
@@ -231,6 +235,8 @@ def test_translate_with_output_file(
                     str(output_file),
                     "--to",
                     "es",
+                    "--model",
+                    "openai:gpt-4o",
                 ],
             )
             assert result.exit_code == 0
@@ -283,7 +289,7 @@ def test_translate_verbose_mode(
             ),
             patch("tinbox.cli.create_translator", return_value=mock_model_interface),
             patch("tinbox.cli.console"),
-        ):
+            ):
             result = cli_runner.invoke(
                 app,
                 [
@@ -291,6 +297,8 @@ def test_translate_verbose_mode(
                     str(test_file),
                     "--to",
                     "es",
+                    "--model",
+                    "openai:gpt-4o",
                     "--verbose",
                 ],
             )
@@ -328,7 +336,7 @@ def test_translate_force_mode(
             ),
             patch("tinbox.cli.create_translator", return_value=mock_model_interface),
             patch("tinbox.cli.console"),
-        ):
+            ):
             result = cli_runner.invoke(
                 app,
                 [
@@ -336,6 +344,8 @@ def test_translate_force_mode(
                     str(test_file),
                     "--to",
                     "es",
+                    "--model",
+                    "openai:gpt-4o",
                     "--force",
                 ],
             )
@@ -375,6 +385,8 @@ def test_translate_max_cost(cli_runner):
                     str(test_file),
                     "--to",
                     "es",
+                    "--model",
+                    "openai:gpt-4o",
                     "--max-cost",
                     "1.0",
                 ],
@@ -585,6 +597,8 @@ def test_translate_with_checkpoints_cleanup_success(
                 str(output_file),
                 "--to",
                 "es",
+                "--model",
+                "openai:gpt-4o",
                 "--checkpoint-dir",
                 str(tmp_path / "checkpoints"),
             ],
@@ -634,6 +648,8 @@ def test_translate_with_checkpoints_no_cleanup_without_checkpoint_dir(
                 str(input_file),
                 "--to",
                 "es",
+                "--model",
+                "openai:gpt-4o",
                 # No --checkpoint-dir specified
             ],
         )
@@ -706,6 +722,8 @@ def test_translate_with_checkpoints_cleanup_called_after_output_written(
                     str(output_file),
                     "--to",
                     "es",
+                    "--model",
+                    "openai:gpt-4o",
                     "--checkpoint-dir",
                     str(tmp_path / "checkpoints"),
                 ],
