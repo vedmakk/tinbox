@@ -13,13 +13,45 @@
 **Quick Start Example:**
 
 ```bash
+# Create a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install with all dependencies
+pip install -e ".[all]"
+
 # Set your API key first
 export OPENAI_API_KEY="your-api-key-here"
-# or
-export ANTHROPIC_API_KEY="your-api-key-here"
 
 # Translate a document
-tinbox translate --to es document.pdf
+tinbox translate --to de --model openai:gpt-5-2025-08-07 ./examples/elara_story.txt
+
+# or using Anthropic
+export ANTHROPIC_API_KEY="your-api-key-here"
+
+tinbox translate --to de --model anthropic:claude-sonnet-4-20250514 ./examples/elara_story.txt
+
+# or using Ollama
+
+# Start ollama server in another terminal
+ollama serve
+
+tinbox translate --to de --model ollama:llama3.1:8b ./examples/elara_story.txt
+```
+
+**PDF Example:**
+
+```bash
+# Install with all dependencies
+pip install -e ".[all]"
+
+# Install poppler, see "System Dependencies" section below
+
+# Set your API key first
+export OPENAI_API_KEY="your-api-key-here"
+
+# Translate a document
+tinbox translate --to de --model openai:gpt-5-2025-08-07 --algorithm page ./examples/elara_story.pdf
 ```
 
 ## 🎯 The Problems Tinbox Solves
@@ -48,8 +80,6 @@ tinbox translate --to es document.pdf
    - Smart text splitting at natural boundaries (paragraphs, sentences, clauses)
    - No duplicate content issues (eliminates overlapping translation problems)
    - Maintains context between pages and segments
-
-![Tinbox Workflow](link_to_diagram.png)
 
 🔍 **Key Highlights:**
 
@@ -103,17 +133,36 @@ tinbox translate --to es document.pdf
 
 ```bash
 # Recommended: Install with all features (includes PDF, DOCX, and image processing)
-pip install "tinbox[all]"
+pip install -e ".[all]"
 
-# Or install base package (you'll need to install Pillow separately)
+# Or install base package
 pip install tinbox
-pip install Pillow  # Required for PDF processing
 
 # For PDF support specifically
-pip install "tinbox[pdf]"
+pip install -e ".[pdf]"
 
 # For Word document support
-pip install "tinbox[docx]"
+pip install -e ".[docx]"
+```
+
+### Development Setup
+
+If you're contributing to Tinbox or running from source:
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd tinbox
+
+# Create a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install for development with all dependencies
+pip install -e ".[dev]"
+
+# Verify installation by running tests
+pytest
 ```
 
 ### System Dependencies
@@ -477,9 +526,6 @@ Make sure you have the development dependencies installed:
 ```bash
 # Install with development dependencies
 pip install -e ".[dev]"
-
-# Or if you're using the project locally
-pip install pytest pytest-asyncio pytest-cov
 ```
 
 ### Running All Tests
