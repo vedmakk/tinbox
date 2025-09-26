@@ -306,6 +306,96 @@ async def translate_page_by_page(
         raise TranslationError(f"Translation failed: {str(e)}") from e
 
 
+# TODO: This seems to be used nowhere… consider removing.
+# ------------------------------------------------------------
+async def repair_seams(
+    pages: list[str],
+    config: TranslationConfig,
+    translator: ModelInterface,
+) -> str:
+    """Repair seams between translated pages.
+
+    Args:
+        pages: List of translated pages
+        config: Translation configuration
+        translator: Model interface for translation
+
+    Returns:
+        Combined text with repaired seams
+
+    Raises:
+        TranslationError: If seam repair fails
+    """
+    if len(pages) <= 1:
+        return pages[0] if pages else ""
+
+    try:
+        result = [pages[0]]
+        for i in range(1, len(pages)):
+            # Extract overlapping content
+            seam = extract_seam(result[-1], pages[i], config.page_seam_overlap)
+            if seam:
+                # Update page with repaired seam
+                result.append(update_page_with_seam(pages[i], seam))
+            else:
+                result.append(pages[i])
+
+        return "\n\n".join(result)
+
+    except Exception as e:
+        raise TranslationError(f"Failed to repair seams: {str(e)}") from e
+
+
+def extract_seam(text1: str, text2: str, overlap_size: int) -> str:
+    """Extract overlapping content between two texts.
+
+    Args:
+        text1: First text
+        text2: Second text
+        overlap_size: Size of overlap to look for
+
+    Returns:
+        Overlapping content or empty string if no overlap found
+    """
+    if not text1 or not text2 or overlap_size <= 0:
+        return ""
+
+    # Get end of first text
+    end1 = text1[-overlap_size:]
+    if not end1:
+        return ""
+
+    # Look for overlap in second text
+    start_pos = text2.find(end1)
+    if start_pos >= 0:
+        return text2[start_pos : start_pos + overlap_size]
+
+    return ""
+
+
+def update_page_with_seam(page: str, seam: str) -> str:
+    """Update page text with repaired seam.
+
+    Args:
+        page: Page text
+        seam: Seam content
+
+    Returns:
+        Updated page text
+    """
+    if not seam:
+        return page
+
+    # Find seam position
+    pos = page.find(seam)
+    if pos >= 0:
+        # Keep text after seam
+        return page[pos + len(seam) :]
+
+    return page
+# ------------------------------------------------------------
+
+
 async def translate_sliding_window(
     content: DocumentContent,
     config: TranslationConfig,
@@ -463,44 +553,6 @@ async def translate_sliding_window(
         raise TranslationError(f"Translation failed: {str(e)}") from e
 
 
-async def repair_seams(
-    pages: list[str],
-    config: TranslationConfig,
-    translator: ModelInterface,
-) -> str:
-    """Repair seams between translated pages.
-
-    Args:
-        pages: List of translated pages
-        config: Translation configuration
-        translator: Model interface for translation
-
-    Returns:
-        Combined text with repaired seams
-
-    Raises:
-        TranslationError: If seam repair fails
-    """
-    if len(pages) <= 1:
-        return pages[0] if pages else ""
-
-    try:
-        result = [pages[0]]
-        for i in range(1, len(pages)):
-            # Extract overlapping content
-            seam = extract_seam(result[-1], pages[i], config.page_seam_overlap)
-            if seam:
-                # Update page with repaired seam
-                result.append(update_page_with_seam(pages[i], seam))
-            else:
-                result.append(pages[i])
-
-        return "\n\n".join(result)
-
-    except Exception as e:
-        raise TranslationError(f"Failed to repair seams: {str(e)}") from e
-
-
 def create_windows(
     text: str,
     window_size: int,
@@ -593,56 +645,6 @@ def merge_chunks(chunks: list[str], overlap_size: int) -> str:
             result += "\n\n" + current_chunk
 
     return result
-
-
-def extract_seam(text1: str, text2: str, overlap_size: int) -> str:
-    """Extract overlapping content between two texts.
-
-    Args:
-        text1: First text
-        text2: Second text
-        overlap_size: Size of overlap to look for
-
-    Returns:
-        Overlapping content or empty string if no overlap found
-    """
-    if not text1 or not text2 or overlap_size <= 0:
-        return ""
-
-    # Get end of first text
-    end1 = text1[-overlap_size:]
-    if not end1:
-        return ""
-
-    # Look for overlap in second text
-    start_pos = text2.find(end1)
-    if start_pos >= 0:
-        return text2[start_pos : start_pos + overlap_size]
-
-    return ""
-
-
-def update_page_with_seam(page: str, seam: str) -> str:
-    """Update page text with repaired seam.
-
-    Args:
-        page: Page text
-        seam: Seam content
-
-    Returns:
-        Updated page text
-    """
-    if not seam:
-        return page
-
-    # Find seam position
-    pos = page.find(seam)
-    if pos >= 0:
-        # Keep text after seam
-        return page[pos + len(seam) :]
-
-    return page
-
 
 def smart_text_split(
     text: str,
