@@ -173,7 +173,7 @@ tinbox translate --to es --reasoning-effort low --max-cost 10.00 --model openai:
 | **Technical Docs**    | `--glossary --save-glossary terms.json` | Maintains consistent terminology                             |
 | **Long Translations** | `--checkpoint-dir ./checkpoints`        | Resume interrupted translations                              |
 | **Cost Control**      | `--dry-run --max-cost 5.00`             | Preview costs before translating                             |
-| **Reasoning**         | `--reasoning-effort low`                | Model reasoning level (minimal, low, medium, high)           |
+| **Reasoning**         | `--reasoning-effort minimal`            | Faster and cheaper, only use higher levels if needed         |
 
 ## 📖 Detailed Documentation
 
